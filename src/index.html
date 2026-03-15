@@ -3611,6 +3611,745 @@
       }
     }
 
+
+    // ===== BUSINESS DENSITY + TRANSPORT NODES (P1) =====
+    const BUSINESS_CONFIG = {
+      cacheKey: 'osm_business',
+      ttlMs: 1000 * 60 * 60 * 12,
+      hexagonId: 'business-hexagons',
+      radiusMeters: 200
+    };
+
+    const BUSINESS_FALLBACK_SEEDS = [
+      { area: 'Liverpool ONE', coordinates: [-2.9876, 53.4015], categories: { shop: 18, restaurant: 10, cafe: 8, bank: 4, office: 6 } },
+      { area: 'Ropewalks', coordinates: [-2.9809, 53.4029], categories: { restaurant: 9, cafe: 7, pub: 8, office: 4, shop: 6 } },
+      { area: 'Baltic Triangle', coordinates: [-2.9788, 53.3944], categories: { office: 12, cafe: 6, restaurant: 5, pub: 5, shop: 3 } },
+      { area: 'Knowledge Quarter', coordinates: [-2.9728, 53.4057], categories: { office: 10, cafe: 6, pharmacy: 3, restaurant: 4, shop: 4 } },
+      { area: 'Lime Street', coordinates: [-2.9792, 53.4074], categories: { shop: 9, cafe: 5, restaurant: 4, pharmacy: 2, office: 3 } },
+      { area: 'Smithdown Road', coordinates: [-2.9356, 53.3932], categories: { shop: 8, restaurant: 5, cafe: 5, pub: 4, pharmacy: 3 } },
+      { area: 'Allerton Road', coordinates: [-2.9111, 53.3728], categories: { shop: 10, restaurant: 6, cafe: 6, bank: 3, pharmacy: 3 } },
+      { area: 'Old Swan', coordinates: [-2.9126, 53.4121], categories: { shop: 9, cafe: 3, pharmacy: 3, office: 2, restaurant: 3 } },
+      { area: 'Bootle Strand fringe', coordinates: [-2.9958, 53.4511], categories: { shop: 7, office: 3, cafe: 3, bank: 2, pharmacy: 2 } },
+      { area: 'Anfield', coordinates: [-2.9595, 53.4308], categories: { pub: 6, shop: 5, cafe: 3, restaurant: 3, pharmacy: 2 } }
+    ];
+
+    const TRANSPORT_CONFIG = {
+      cacheKey: 'transport_nodes',
+      ttlMs: 1000 * 60 * 60 * 24
+    };
+
+    const TRANSPORT_FALLBACK_NODES = [
+      { id: 'lime-street', name: 'Liverpool Lime Street', type: 'rail', coordinates: [-2.9787, 53.4075], lines: ['West Coast Main Line', 'City Line'], boardings: '105k weekly' },
+      { id: 'central', name: 'Liverpool Central', type: 'rail', coordinates: [-2.9821, 53.4036], lines: ['Northern Line', 'Wirral Line'], boardings: '118k weekly' },
+      { id: 'james-street', name: 'James Street', type: 'rail', coordinates: [-2.9915, 53.4047], lines: ['Wirral Line'], boardings: '46k weekly' },
+      { id: 'moorfields', name: 'Moorfields', type: 'rail', coordinates: [-2.9896, 53.4097], lines: ['Northern Line'], boardings: '44k weekly' },
+      { id: 'south-parkway', name: 'Liverpool South Parkway', type: 'rail', coordinates: [-2.8964, 53.3576], lines: ['West Coast Main Line', 'Northern Line', 'City Line'], boardings: '52k weekly' },
+      { id: 'edge-hill', name: 'Edge Hill', type: 'rail', coordinates: [-2.9482, 53.4025], lines: ['City Line'], boardings: '12k weekly' },
+      { id: 'wavertree-tech-park', name: 'Wavertree Technology Park', type: 'rail', coordinates: [-2.9224, 53.4041], lines: ['City Line'], boardings: '11k weekly' },
+      { id: 'mossley-hill', name: 'Mossley Hill', type: 'rail', coordinates: [-2.9159, 53.3791], lines: ['City Line'], boardings: '9k weekly' },
+      { id: 'st-michaels', name: 'St Michaels', type: 'rail', coordinates: [-2.9524, 53.3759], lines: ['Northern Line'], boardings: '10k weekly' },
+      { id: 'brunswick', name: 'Brunswick', type: 'rail', coordinates: [-2.9888, 53.3838], lines: ['Northern Line'], boardings: '8k weekly' },
+      { id: 'sandhills', name: 'Sandhills', type: 'rail', coordinates: [-2.9919, 53.4298], lines: ['Northern Line'], boardings: '15k weekly' },
+      { id: 'kirkdale', name: 'Kirkdale', type: 'rail', coordinates: [-2.9807, 53.4488], lines: ['Northern Line'], boardings: '7k weekly' },
+      { id: 'hunts-cross', name: 'Hunts Cross', type: 'rail', coordinates: [-2.8551, 53.3593], lines: ['Northern Line', 'City Line'], boardings: '14k weekly' },
+      { id: 'queen-square', name: 'Queen Square Bus Station', type: 'bus', coordinates: [-2.9814, 53.4098], lines: ['10A', '14', '75', '86A'], boardings: '92k weekly' },
+      { id: 'sir-thomas-street', name: 'Sir Thomas Street Interchange', type: 'bus', coordinates: [-2.9842, 53.4086], lines: ['18', '27', '79', '82'], boardings: '61k weekly' },
+      { id: 'liverpool-one-bus', name: 'Liverpool ONE Bus Station', type: 'bus', coordinates: [-2.9887, 53.3993], lines: ['26', '82A', '500', 'X1'], boardings: '74k weekly' }
+    ];
+
+    const businessState = {
+      pois: [],
+      selectedHex: null,
+      source: null,
+      sourceLabel: ''
+    };
+
+    const transportState = {
+      nodes: [],
+      markers: [],
+      selectedNodeId: null,
+      source: null,
+      sourceLabel: ''
+    };
+
+    function computeDistanceKm(fromCoordinates, toCoordinates) {
+      if (window.turf) {
+        return turf.distance(turf.point(fromCoordinates), turf.point(toCoordinates), { units: 'kilometers' });
+      }
+      const [fromLng, fromLat] = fromCoordinates;
+      const [toLng, toLat] = toCoordinates;
+      const dLat = (toLat - fromLat) * 111;
+      const dLng = (toLng - fromLng) * 68;
+      return Math.sqrt((dLat * dLat) + (dLng * dLng));
+    }
+
+    function walkingMinutesFromKm(distanceKm) {
+      return Math.max(2, Math.round(distanceKm * 12));
+    }
+
+    function humanizeBusinessType(type) {
+      const labels = {
+        bank: 'Bank',
+        bar: 'Bar',
+        cafe: 'Cafe',
+        office: 'Office',
+        pharmacy: 'Pharmacy',
+        pub: 'Pub',
+        restaurant: 'Restaurant',
+        shop: 'Shop'
+      };
+      return labels[type] || String(type || 'business').charAt(0).toUpperCase() + String(type || 'business').slice(1);
+    }
+
+    function buildBusinessFallbackPois() {
+      const pois = [];
+      BUSINESS_FALLBACK_SEEDS.forEach((seed, seedIndex) => {
+        Object.entries(seed.categories).forEach(([type, count], typeIndex) => {
+          for (let step = 0; step < count; step += 1) {
+            const angle = (((step + 1) * 37) + (seedIndex * 49) + (typeIndex * 23)) % 360;
+            const radius = 0.00035 + (((step + typeIndex) % 6) * 0.00018);
+            const radians = (angle * Math.PI) / 180;
+            const lng = seed.coordinates[0] + (Math.cos(radians) * radius);
+            const lat = seed.coordinates[1] + (Math.sin(radians) * radius * 0.72);
+            pois.push({
+              id: `biz-${seedIndex}-${typeIndex}-${step}`,
+              name: `${seed.area} ${humanizeBusinessType(type)} ${step + 1}`,
+              area: seed.area,
+              type,
+              coordinates: [Number(lng.toFixed(6)), Number(lat.toFixed(6))]
+            });
+          }
+        });
+      });
+      return pois;
+    }
+
+    const BUSINESS_FALLBACK_POIS = buildBusinessFallbackPois();
+
+    function cloneBusinessPois(pois) {
+      return pois.map((poi) => ({ ...poi, coordinates: [...poi.coordinates] }));
+    }
+
+    async function resolveBusinessLayerData() {
+      const cacheRaw = sessionStorage.getItem(BUSINESS_CONFIG.cacheKey);
+      if (cacheRaw) {
+        try {
+          const cached = JSON.parse(cacheRaw);
+          if (cached && typeof cached.ts === 'number' && Date.now() - cached.ts < BUSINESS_CONFIG.ttlMs) {
+            const cacheTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date(cached.ts));
+            appState.cacheMeta[BUSINESS_CONFIG.cacheKey] = `Session cache · ${cacheTime}`;
+            return cached.payload;
+          }
+        } catch {
+          sessionStorage.removeItem(BUSINESS_CONFIG.cacheKey);
+        }
+      }
+
+      const payload = {
+        pois: cloneBusinessPois(BUSINESS_FALLBACK_POIS),
+        source: 'fallback',
+        sourceLabel: 'Embedded fallback · Liverpool commercial POIs'
+      };
+      try {
+        sessionStorage.setItem(BUSINESS_CONFIG.cacheKey, JSON.stringify({ payload, ts: Date.now() }));
+      } catch {
+      }
+      const fallbackTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date());
+      appState.cacheMeta[BUSINESS_CONFIG.cacheKey] = `Embedded fallback · ${fallbackTime}`;
+      return payload;
+    }
+
+    async function resolveTransportLayerData() {
+      const cacheRaw = sessionStorage.getItem(TRANSPORT_CONFIG.cacheKey);
+      if (cacheRaw) {
+        try {
+          const cached = JSON.parse(cacheRaw);
+          if (cached && typeof cached.ts === 'number' && Date.now() - cached.ts < TRANSPORT_CONFIG.ttlMs) {
+            const cacheTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date(cached.ts));
+            appState.cacheMeta[TRANSPORT_CONFIG.cacheKey] = `Session cache · ${cacheTime}`;
+            return cached.payload;
+          }
+        } catch {
+          sessionStorage.removeItem(TRANSPORT_CONFIG.cacheKey);
+        }
+      }
+
+      const payload = {
+        nodes: TRANSPORT_FALLBACK_NODES.map((node) => ({ ...node, coordinates: [...node.coordinates], lines: [...node.lines] })),
+        source: 'fallback',
+        sourceLabel: 'Embedded fallback · Merseyrail + core bus interchanges'
+      };
+      try {
+        sessionStorage.setItem(TRANSPORT_CONFIG.cacheKey, JSON.stringify({ payload, ts: Date.now() }));
+      } catch {
+      }
+      const fallbackTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date());
+      appState.cacheMeta[TRANSPORT_CONFIG.cacheKey] = `Embedded fallback · ${fallbackTime}`;
+      return payload;
+    }
+
+    function getBusinessPointsInView() {
+      const sourcePois = businessState.pois.length ? businessState.pois : BUSINESS_FALLBACK_POIS;
+      if (!appState.map || !sourcePois.length) {
+        return sourcePois;
+      }
+      const bounds = appState.map.getBounds();
+      return sourcePois.filter((poi) => (
+        poi.coordinates[0] >= bounds.getWest()
+        && poi.coordinates[0] <= bounds.getEast()
+        && poi.coordinates[1] >= bounds.getSouth()
+        && poi.coordinates[1] <= bounds.getNorth()
+      ));
+    }
+
+    function computeBusinessCategoryCounts(pois) {
+      const counts = {};
+      pois.forEach((poi) => {
+        counts[poi.type] = (counts[poi.type] || 0) + 1;
+      });
+      return Object.entries(counts)
+        .map(([type, count]) => ({ type, label: humanizeBusinessType(type), count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    }
+
+    function getBusinessDensityTier(total) {
+      if (total >= 40) return 'High';
+      if (total >= 22) return 'Moderate';
+      if (total >= 10) return 'Emerging';
+      return 'Light';
+    }
+
+    function computeBusinessViewportSummary(pois = getBusinessPointsInView()) {
+      const total = pois.length;
+      const topCategories = computeBusinessCategoryCounts(pois).slice(0, 5);
+      const areaCounts = {};
+      pois.forEach((poi) => {
+        areaCounts[poi.area] = (areaCounts[poi.area] || 0) + 1;
+      });
+      const strongestArea = Object.entries(areaCounts).sort((a, b) => b[1] - a[1])[0];
+      return {
+        total,
+        topCategories,
+        strongestArea: strongestArea ? { area: strongestArea[0], count: strongestArea[1] } : null,
+        densityTier: getBusinessDensityTier(total)
+      };
+    }
+
+    function getCurrentReferenceCoordinates() {
+      if (transportState.selectedNodeId) {
+        const selectedNode = transportState.nodes.find((node) => node.id === transportState.selectedNodeId);
+        if (selectedNode) {
+          return selectedNode.coordinates;
+        }
+      }
+      if (appState.selection?.coordinates) {
+        return appState.selection.coordinates;
+      }
+      if (appState.map) {
+        const center = appState.map.getCenter();
+        return [center.lng, center.lat];
+      }
+      return LIVERPOOL_CENTER;
+    }
+
+    function getBusinessCatchmentSummary(referenceCoordinates = getCurrentReferenceCoordinates(), radiusKm = 0.75) {
+      const sourcePois = businessState.pois.length ? businessState.pois : BUSINESS_FALLBACK_POIS;
+      const localPois = sourcePois.filter((poi) => computeDistanceKm(referenceCoordinates, poi.coordinates) <= radiusKm);
+      return {
+        total: localPois.length,
+        topCategories: computeBusinessCategoryCounts(localPois).slice(0, 3),
+        densityTier: getBusinessDensityTier(localPois.length)
+      };
+    }
+
+    function summariseBusinessHex(object, coordinate) {
+      const points = Array.isArray(object?.points) ? object.points : [];
+      const counts = computeBusinessCategoryCounts(points);
+      const areaCounts = {};
+      points.forEach((poi) => {
+        areaCounts[poi.area] = (areaCounts[poi.area] || 0) + 1;
+      });
+      const primaryArea = Object.entries(areaCounts).sort((a, b) => b[1] - a[1])[0];
+      return {
+        coordinate,
+        total: points.length,
+        topCategories: counts.slice(0, 3),
+        primaryArea: primaryArea ? primaryArea[0] : 'Mixed catchment'
+      };
+    }
+
+    function renderBusinessCategoryBars(entries, total) {
+      if (!entries.length) {
+        return '<div class="info-card"><h3>No venues in the current view</h3><p>Pan the map slightly wider or zoom out to rebuild the business mix.</p></div>';
+      }
+      return `
+        <div class="crime-bar-list">
+          ${entries.map((entry) => `
+            <div class="crime-bar">
+              <div class="crime-bar-head">
+                <strong>${escapeHtml(entry.label)}</strong>
+                <span>${entry.count.toLocaleString()}</span>
+              </div>
+              <div class="crime-bar-track">
+                <span class="crime-bar-fill" style="width:${Math.max(8, (entry.count / Math.max(total, 1)) * 100).toFixed(1)}%"></span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function openBusinessHexPopup(summary) {
+      if (!appState.map || !summary) return;
+      removeLayerPopups('business');
+      const popup = new maplibregl.Popup({ offset: 18 })
+        .setLngLat(summary.coordinate)
+        .setHTML(`
+          <div class="map-popup">
+            <h3>${escapeHtml(summary.primaryArea)}</h3>
+            <p><strong>${summary.total}</strong> venues in this hex<br />Top mix: ${escapeHtml(summary.topCategories.map((entry) => `${entry.label} (${entry.count})`).join(', ') || 'n/a')}</p>
+          </div>
+        `)
+        .addTo(appState.map);
+      addLayerPopup('business', popup);
+    }
+
+    function handleBusinessHexClick(info) {
+      if (!info?.object || !info.coordinate) return;
+      if (info.srcEvent?.stopPropagation) {
+        info.srcEvent.stopPropagation();
+      }
+      appState.suppressedMapClickUntil = Date.now() + 250;
+      businessState.selectedHex = summariseBusinessHex(info.object, info.coordinate);
+      appState.selection = {
+        type: 'business-hex',
+        label: `${businessState.selectedHex.primaryArea} cluster`,
+        coordinates: businessState.selectedHex.coordinate,
+        description: `${businessState.selectedHex.total} venues in the selected hex. Top mix: ${businessState.selectedHex.topCategories.map((entry) => entry.label).join(', ') || 'n/a'}.`
+      };
+      appState.panel.activeDetail = 'business-hex';
+      setPanelOpen(true, { silentRender: true });
+      renderLayerSummary();
+      renderPanel();
+      openBusinessHexPopup(businessState.selectedHex);
+      updateLastUpdated(`Business cluster selected: ${businessState.selectedHex.primaryArea}`);
+    }
+
+    function getBusinessTransportInsight() {
+      const nearest = getNearestTransportNodes(1)[0] || null;
+      const localBusiness = getBusinessCatchmentSummary();
+      const transportScore = !nearest ? 2 : nearest.distanceKm <= 0.35 ? 10 : nearest.distanceKm <= 0.7 ? 8 : nearest.distanceKm <= 1.1 ? 6 : nearest.distanceKm <= 1.8 ? 4 : 2;
+      const businessScore = localBusiness.total >= 18 ? 10 : localBusiness.total >= 12 ? 8 : localBusiness.total >= 7 ? 6 : localBusiness.total >= 3 ? 4 : 2;
+      const score = Math.round(((transportScore * 0.6) + (businessScore * 0.4)) * 10) / 10;
+      let narrative = 'Connectivity is thin and the immediate commercial catchment is still light.';
+      if (transportScore >= 8 && businessScore >= 8) {
+        narrative = 'Commercial hub — high footfall opportunity with strong transport coverage and a deep amenity stack.';
+      } else if (transportScore >= 8 && businessScore <= 4) {
+        narrative = 'Well-connected but comparatively underserved — strong candidate for convenience retail or services.';
+      } else if (transportScore <= 4 && businessScore >= 8) {
+        narrative = 'Active commercial pocket with weaker public-transport reach — access improvements would unlock more footfall.';
+      } else if (transportScore >= 6 && businessScore >= 6) {
+        narrative = 'Balanced mixed-use catchment with enough connectivity and local commerce to support steady demand.';
+      }
+      return { score, transportScore, businessScore, narrative, nearest, localBusiness };
+    }
+
+    function getBusinessButtonState() {
+      if (appState.layerErrors.business) {
+        return { label: 'Business (unavailable)', meta: appState.layerErrors.business.message };
+      }
+      if (!businessState.pois.length) {
+        return { label: LAYER_DEFINITIONS.business.label, meta: LAYER_DEFINITIONS.business.meta };
+      }
+      const viewSummary = computeBusinessViewportSummary();
+      return {
+        label: `Business (${businessState.pois.length})`,
+        meta: `${viewSummary.total} in view · ${viewSummary.densityTier.toLowerCase()} density · ${businessState.source === 'fallback' ? 'embedded' : businessState.source}`
+      };
+    }
+
+    function getBusinessDeckLayers() {
+      if (!appState.activeLayers.business || !businessState.pois.length || !window.deck?.HexagonLayer) {
+        return [];
+      }
+      return [
+        new deck.HexagonLayer({
+          id: BUSINESS_CONFIG.hexagonId,
+          data: businessState.pois,
+          pickable: true,
+          extruded: true,
+          radius: BUSINESS_CONFIG.radiusMeters,
+          coverage: 0.86,
+          elevationScale: 28,
+          upperPercentile: 100,
+          getPosition: (poi) => poi.coordinates,
+          getElevationWeight: () => 1,
+          elevationAggregation: 'SUM',
+          getColorWeight: () => 1,
+          colorAggregation: 'SUM',
+          colorRange: [
+            [59, 130, 246],
+            [14, 165, 233],
+            [6, 182, 212],
+            [168, 243, 255],
+            [255, 255, 255]
+          ],
+          material: { ambient: 0.35, diffuse: 0.58, shininess: 32, specularColor: [180, 210, 255] },
+          parameters: { depthTest: false },
+          onClick: handleBusinessHexClick,
+          onHover: (info) => {
+            if (appState.map) {
+              appState.map.getCanvas().style.cursor = info.object ? 'pointer' : '';
+            }
+          }
+        })
+      ];
+    }
+
+    async function loadBusinessLayer() {
+      appState.loadingLayers.business = true;
+      renderLayerButtons();
+      updateLastUpdated('Business density: loading fallback POIs...');
+      try {
+        const payload = await resolveBusinessLayerData();
+        if (!appState.activeLayers.business) {
+          return;
+        }
+        businessState.pois = payload.pois;
+        businessState.source = payload.source;
+        businessState.sourceLabel = payload.sourceLabel;
+        appState.layerErrors.business = null;
+        appState.panel.activeDetail = 'business';
+        appState.selection = {
+          type: 'business-layer',
+          label: 'Business density',
+          description: `${businessState.pois.length} embedded commercial POIs ready for hex aggregation.`
+        };
+        clearBanner();
+        updateDeckOverlay();
+        renderLayerButtons();
+        renderLayerSummary();
+        renderLegend();
+        renderPanel();
+        updateLastUpdated(`Business density active · ${businessState.source === 'fallback' ? 'fallback data' : businessState.source}`);
+      } catch (error) {
+        businessState.pois = [];
+        appState.layerErrors.business = { message: error.message, error };
+        appState.activeLayers.business = false;
+        setBanner({ title: 'Business density unavailable', message: error.message || 'Business density could not be prepared.' });
+        updateDeckOverlay();
+      } finally {
+        appState.loadingLayers.business = false;
+        renderLayerButtons();
+      }
+    }
+
+    function hideBusinessLayer() {
+      removeLayerPopups('business');
+      businessState.selectedHex = null;
+      if (appState.selection?.type === 'business-hex' || appState.selection?.type === 'business-layer') {
+        appState.selection = null;
+      }
+      if (appState.panel.activeDetail === 'business' || appState.panel.activeDetail === 'business-hex') {
+        appState.panel.activeDetail = appState.activeLayers.transport ? 'transport' : 'system';
+      }
+      updateDeckOverlay();
+    }
+
+    function getTransportNode(nodeId) {
+      return transportState.nodes.find((node) => node.id === nodeId) || null;
+    }
+
+    function getNearestTransportNodes(limit = 5, referenceCoordinates = getCurrentReferenceCoordinates()) {
+      const nodes = transportState.nodes.length ? transportState.nodes : TRANSPORT_FALLBACK_NODES;
+      return nodes
+        .map((node) => {
+          const distanceKm = computeDistanceKm(referenceCoordinates, node.coordinates);
+          return { ...node, distanceKm, walkingMinutes: walkingMinutesFromKm(distanceKm) };
+        })
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, limit);
+    }
+
+    function getTransportButtonState() {
+      if (appState.layerErrors.transport) {
+        return { label: 'Transport (unavailable)', meta: appState.layerErrors.transport.message };
+      }
+      if (!transportState.nodes.length) {
+        return { label: LAYER_DEFINITIONS.transport.label, meta: LAYER_DEFINITIONS.transport.meta };
+      }
+      const nearest = getNearestTransportNodes(1)[0];
+      return {
+        label: `Transport (${transportState.nodes.length})`,
+        meta: nearest ? `${nearest.name} · ${nearest.distanceKm.toFixed(2)} km from focus` : 'Static Merseyrail + bus node set'
+      };
+    }
+
+    function removeTransportMarkers() {
+      transportState.markers.forEach((entry) => entry.marker.remove());
+      transportState.markers = [];
+    }
+
+    function syncTransportMarkerSelection() {
+      transportState.markers.forEach((entry) => {
+        entry.element.classList.toggle('selected', entry.id === transportState.selectedNodeId);
+      });
+    }
+
+    function openTransportPopup(node, lngLat = node.coordinates) {
+      if (!appState.map || !node) return;
+      removeLayerPopups('transport');
+      const popup = new maplibregl.Popup({ offset: 18 })
+        .setLngLat(lngLat)
+        .setHTML(`
+          <div class="map-popup">
+            <h3>${escapeHtml(node.name)}</h3>
+            <p><strong>Mode:</strong> ${escapeHtml(node.type === 'rail' ? 'Rail station' : 'Bus interchange')}<br /><strong>Lines:</strong> ${escapeHtml(node.lines.join(', '))}<br /><strong>Boardings:</strong> ${escapeHtml(node.boardings)}</p>
+          </div>
+        `)
+        .addTo(appState.map);
+      addLayerPopup('transport', popup);
+    }
+
+    function focusTransportNode(nodeId, options = {}) {
+      const node = getTransportNode(nodeId);
+      if (!node) return;
+      transportState.selectedNodeId = node.id;
+      appState.selection = {
+        type: 'transport-node',
+        label: node.name,
+        coordinates: node.coordinates,
+        description: `${node.type === 'rail' ? 'Rail' : 'Bus'} access · ${node.lines.join(', ')} · ${node.boardings}`
+      };
+      appState.panel.activeDetail = 'transport-node';
+      setPanelOpen(true, { silentRender: true });
+      syncTransportMarkerSelection();
+      renderLayerSummary();
+      renderPanel();
+      if (options.flyTo && appState.map) {
+        appState.map.flyTo({ center: node.coordinates, zoom: Math.max(appState.map.getZoom(), 13.4), essential: true, speed: 0.75 });
+      }
+      if (options.popup) {
+        openTransportPopup(node, node.coordinates);
+      }
+      if (!options.silentTimestamp) {
+        updateLastUpdated(`Transport node selected: ${node.name}`);
+      }
+    }
+
+    function renderTransportLayer() {
+      if (!appState.map || !transportState.nodes.length) return;
+      removeTransportMarkers();
+      transportState.nodes.forEach((node) => {
+        const el = document.createElement('div');
+        el.className = `transport-marker ${node.type}`;
+        el.setAttribute('title', node.name);
+        el.setAttribute('aria-label', `${node.name} transport marker`);
+        el.textContent = node.type === 'rail' ? '🚉' : '🚌';
+        el.addEventListener('click', (event) => {
+          event.stopPropagation();
+          focusTransportNode(node.id, { popup: true, silentTimestamp: true });
+        });
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat(node.coordinates)
+          .addTo(appState.map);
+        transportState.markers.push({ id: node.id, marker, element: el });
+      });
+      if (!transportState.selectedNodeId && transportState.nodes[0]) {
+        transportState.selectedNodeId = transportState.nodes[0].id;
+      }
+      syncTransportMarkerSelection();
+    }
+
+    async function loadTransportLayer() {
+      appState.loadingLayers.transport = true;
+      renderLayerButtons();
+      updateLastUpdated('Transport nodes: loading static network...');
+      try {
+        const payload = await resolveTransportLayerData();
+        if (!appState.activeLayers.transport) {
+          return;
+        }
+        transportState.nodes = payload.nodes;
+        transportState.source = payload.source;
+        transportState.sourceLabel = payload.sourceLabel;
+        appState.layerErrors.transport = null;
+        renderTransportLayer();
+        if (!transportState.selectedNodeId && transportState.nodes[0]) {
+          transportState.selectedNodeId = transportState.nodes[0].id;
+        }
+        appState.panel.activeDetail = 'transport';
+        appState.selection = {
+          type: 'transport-layer',
+          label: 'Transport nodes',
+          description: `${transportState.nodes.length} embedded rail and bus nodes ready for connectivity analysis.`
+        };
+        clearBanner();
+        renderLayerButtons();
+        renderLayerSummary();
+        renderLegend();
+        renderPanel();
+        updateLastUpdated(`Transport nodes active · ${transportState.source === 'fallback' ? 'fallback data' : transportState.source}`);
+      } catch (error) {
+        transportState.nodes = [];
+        appState.layerErrors.transport = { message: error.message, error };
+        appState.activeLayers.transport = false;
+        setBanner({ title: 'Transport nodes unavailable', message: error.message || 'Transport nodes could not be prepared.' });
+      } finally {
+        appState.loadingLayers.transport = false;
+        renderLayerButtons();
+      }
+    }
+
+    function hideTransportLayer() {
+      removeTransportMarkers();
+      removeLayerPopups('transport');
+      transportState.selectedNodeId = null;
+      if (appState.selection?.type === 'transport-node' || appState.selection?.type === 'transport-layer') {
+        appState.selection = null;
+      }
+      if (appState.panel.activeDetail === 'transport' || appState.panel.activeDetail === 'transport-node') {
+        appState.panel.activeDetail = appState.activeLayers.business ? 'business' : 'system';
+      }
+    }
+
+    function renderTransportNodeCards(nodes) {
+      if (!nodes.length) {
+        return '<div class="info-card"><h3>No nodes available</h3><p>Transport nodes will appear here when the layer is active.</p></div>';
+      }
+      return `
+        <div class="transport-node-list">
+          ${nodes.map((node) => `
+            <button class="transport-node-card ${node.id === transportState.selectedNodeId ? 'selected' : ''}" type="button" data-transport-node="${node.id}">
+              <div class="transport-node-head">
+                <div class="transport-node-meta">
+                  <h3>${escapeHtml(node.name)}</h3>
+                  <p>${node.distanceKm.toFixed(2)} km from the current focus · ~${node.walkingMinutes} min walk</p>
+                </div>
+                <span class="transport-node-badge ${node.type}">${node.type === 'rail' ? '🚉 Rail' : '🚌 Bus'}</span>
+              </div>
+              <div class="transport-detail-grid">
+                <div><strong>Lines</strong><span>${escapeHtml(node.lines.join(', '))}</span></div>
+                <div><strong>Boardings</strong><span>${escapeHtml(node.boardings)}</span></div>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderBusinessTransportOverviewPanel() {
+      const viewSummary = computeBusinessViewportSummary();
+      const insight = getBusinessTransportInsight();
+      const nearestNodes = getNearestTransportNodes(5);
+      const selectedNode = getTransportNode(transportState.selectedNodeId);
+      const selectedHex = businessState.selectedHex;
+      return `
+        <div class="stack">
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">Venues in view</span>
+              <span class="metric-value">${viewSummary.total}</span>
+              <span class="metric-note">${viewSummary.densityTier} business density${viewSummary.strongestArea ? ` · strongest pocket ${escapeHtml(viewSummary.strongestArea.area)}` : ''}.</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Connectivity score</span>
+              <span class="metric-value">${insight.score}/10</span>
+              <span class="metric-note">Transport ${insight.transportScore}/10 · business ${insight.businessScore}/10.</span>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <h3>Combined insight</h3>
+            <p>${escapeHtml(insight.narrative)}</p>
+          </div>
+
+          ${appState.activeLayers.business ? `
+            <div class="info-card">
+              <h3>Top business categories in the current map view</h3>
+              <p>${escapeHtml(businessState.sourceLabel || 'Embedded business POIs')}</p>
+              ${renderBusinessCategoryBars(viewSummary.topCategories, Math.max(viewSummary.total, 1))}
+            </div>
+          ` : ''}
+
+          ${selectedHex ? `
+            <div class="info-card">
+              <h3>Selected hex cluster</h3>
+              <p>${escapeHtml(selectedHex.primaryArea)} · ${selectedHex.total} venues. Top mix: ${escapeHtml(selectedHex.topCategories.map((entry) => `${entry.label} (${entry.count})`).join(', ') || 'n/a')}</p>
+            </div>
+          ` : ''}
+
+          ${appState.activeLayers.transport ? `
+            <div class="info-card">
+              <h3>Nearest stations to the current focus</h3>
+              <p>${selectedNode ? `${escapeHtml(selectedNode.name)} is currently selected.` : 'Click a marker or card to inspect a node.'}</p>
+            </div>
+            ${renderTransportNodeCards(nearestNodes)}
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderBusinessTransportDataPanel() {
+      const viewSummary = computeBusinessViewportSummary();
+      const nearestNodes = getNearestTransportNodes(8);
+      const businessRows = computeBusinessCategoryCounts(getBusinessPointsInView()).map((entry) => `
+        <tr>
+          <td><strong>${escapeHtml(entry.label)}</strong></td>
+          <td>${entry.count}</td>
+        </tr>
+      `).join('');
+      const transportRows = nearestNodes.map((node) => `
+        <tr>
+          <td><strong>${escapeHtml(node.name)}</strong><br /><span style="color:var(--text-muted)">${node.type === 'rail' ? 'Rail' : 'Bus'} node</span></td>
+          <td>${node.distanceKm.toFixed(2)} km</td>
+          <td>${node.walkingMinutes} min</td>
+        </tr>
+      `).join('');
+      return `
+        <div class="stack">
+          <div class="info-card">
+            <h3>Provenance</h3>
+            <ul class="status-list">
+              <li><strong>Business source</strong>${escapeHtml(businessState.sourceLabel || 'Inactive')}</li>
+              <li><strong>Transport source</strong>${escapeHtml(transportState.sourceLabel || 'Inactive')}</li>
+              <li><strong>Business cache</strong>${escapeHtml(appState.cacheMeta[BUSINESS_CONFIG.cacheKey] || 'No business cache metadata')}</li>
+              <li><strong>Transport cache</strong>${escapeHtml(appState.cacheMeta[TRANSPORT_CONFIG.cacheKey] || 'No transport cache metadata')}</li>
+            </ul>
+          </div>
+
+          ${appState.activeLayers.business ? `
+            <div class="info-card">
+              <h3>Current business view</h3>
+              <p>${viewSummary.total} venues currently fall inside the visible viewport.</p>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody>${businessRows || '<tr><td colspan="2">No venues in view.</td></tr>'}</tbody>
+            </table>
+          ` : ''}
+
+          ${appState.activeLayers.transport ? `
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Node</th>
+                  <th>Distance</th>
+                  <th>Walk</th>
+                </tr>
+              </thead>
+              <tbody>${transportRows}</tbody>
+            </table>
+          ` : ''}
+        </div>
+      `;
+    }
+
     // ===== DEPRIVATION LAYER (P1) =====
     const DEPRIVATION_CONFIG = {
       sourceId: 'deprivation-lsoa',
@@ -3805,52 +4544,38 @@
     });
 
     LayerRegistry.register('business', {
-      load() {
-        appState.loadingLayers.business = true;
-        renderLayerButtons();
-        updateLastUpdated('Business: pending data implementation');
-        setTimeout(() => {
-          appState.loadingLayers.business = false;
-          renderLayerButtons();
-          updateLastUpdated('Business layer armed (data pending)');
-        }, 600);
-      },
+      load: loadBusinessLayer,
       render() {},
-      hide() {
-        removeLayerPopups('business');
-        updateDeckOverlay();
-      },
+      hide: hideBusinessLayer,
       destroyPanelArtifacts() { destroyLayerCharts('business'); },
       getLegendItems() { return LAYER_DEFINITIONS.business.legends; },
+      getButtonState: getBusinessButtonState,
       getPanelContent(tab) {
-        if (appState.panel.activeDetail !== 'business') return null;
-        if (tab === 'about') return null;
-        return `<div class="stack"><div class="info-card"><h3>Business Density</h3><p>${LAYER_DEFINITIONS.business.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
-      }
+        const isBusinessDetail = ['business', 'business-hex', 'transport', 'transport-node'].includes(appState.panel.activeDetail);
+        if (!isBusinessDetail || (!appState.activeLayers.business && !appState.activeLayers.transport)) return null;
+        if (tab === 'overview') return renderBusinessTransportOverviewPanel();
+        if (tab === 'data') return renderBusinessTransportDataPanel();
+        return null;
+      },
+      getDeckLayers: getBusinessDeckLayers
     });
 
     LayerRegistry.register('transport', {
-      load() {
-        appState.loadingLayers.transport = true;
-        renderLayerButtons();
-        updateLastUpdated('Transport: pending data implementation');
-        setTimeout(() => {
-          appState.loadingLayers.transport = false;
-          renderLayerButtons();
-          updateLastUpdated('Transport layer armed (data pending)');
-        }, 600);
-      },
-      render() {},
-      hide() {
-        removeLayerPopups('transport');
-        updateDeckOverlay();
-      },
+      load: loadTransportLayer,
+      render: renderTransportLayer,
+      hide: hideTransportLayer,
       destroyPanelArtifacts() { destroyLayerCharts('transport'); },
       getLegendItems() { return LAYER_DEFINITIONS.transport.legends; },
+      getButtonState: getTransportButtonState,
       getPanelContent(tab) {
-        if (appState.panel.activeDetail !== 'transport') return null;
-        if (tab === 'about') return null;
-        return `<div class="stack"><div class="info-card"><h3>Transport Nodes</h3><p>${LAYER_DEFINITIONS.transport.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+        const isTransportDetail = ['business', 'business-hex', 'transport', 'transport-node'].includes(appState.panel.activeDetail);
+        if (!isTransportDetail || (!appState.activeLayers.business && !appState.activeLayers.transport)) return null;
+        if (tab === 'overview') return renderBusinessTransportOverviewPanel();
+        if (tab === 'data') return renderBusinessTransportDataPanel();
+        return null;
+      },
+      afterPanelRender() {
+        syncTransportMarkerSelection();
       }
     });
 

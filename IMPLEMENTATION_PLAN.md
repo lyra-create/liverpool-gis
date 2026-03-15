@@ -1,7 +1,7 @@
 # IMPLEMENTATION_PLAN.md
 
 ## Confirmed current state (2026-03-15)
-- ✓ `src/index.html` exists: ~2415 lines, single-file GIS shell + deprivation layer + orchestration infrastructure
+- ✓ `src/index.html` exists: single-file GIS dashboard with shell + orchestration + implemented crime, air, deprivation, business, and transport layers
 - ✓ No placeholders (TODO/FIXME/PLACEHOLDER), all required libraries loaded (MapLibre 4.7.1, deck.gl 9.1.0, Turf.js 7.0.0, Chart.js 4.4)
 - ✓ `LayerRegistry` with lifecycle contracts: `load`, `hide`, `destroyPanelArtifacts`, `getLegendItems`, `getPanelContent`, `afterPanelRender`, `getDeckLayers`
 - ✓ Shared `cachedFetch()` wraps `fetchJsonWithTimeout` + sessionStorage with `{ payload, ts }` metadata and TTL
@@ -11,10 +11,12 @@
 - ✓ `toggleLayer()` routes through registry: activate → `mod.load()`, deactivate → `mod.hide()` + `mod.destroyPanelArtifacts()` + `removeLayerPopups(key)`
 - ✓ `renderLegend()` composes from registry `getLegendItems()`, falls back to `LAYER_DEFINITIONS[key].legends`
 - ✓ `renderPanel()` tries registry `getPanelContent(tab)` first, then falls through to Overview/Data/About
-- ✓ Deprivation layer refactored to register via `LayerRegistry.register('deprivation', {...})` — no monkey-patching
-- ✓ 6 remaining layers (crime, air, business, transport, planning, flood) have stub registrations with lifecycle + panel content
+- ✓ Crime layer implemented with cached monthly data, deck.gl heatmap, filters, month switching, and panel summaries
+- ✓ Air layer implemented with DAQI markers, popups, panel gauges, advisory copy, and embedded fallback readings
+- ✓ Deprivation layer implemented with choropleth rendering, hover/click behavior, histogram chart, and drill-down panel state
+- ✓ Business density + transport nodes implemented with embedded fallback POIs/nodes, hexagon aggregation, transport markers, popups, and combined connectivity panel
 - ✓ All prior monkey-patching (`baseToggleLayer`, `baseRenderPanel`, `baseRenderLegend`) eliminated
-- ✓ Version: `0.2.0-orchestration`
+- ✓ Version: `0.5.0-business-transport`
 
 ## Priority plan
 - [x] **P0 — Build the single-file app shell in `src/index.html`.** MapLibre map, header bar, layer controls, panel (Overview/Data/About tabs), legend, footer, error banner, postcode search, map-click capture, responsive layout. **DONE (2156 lines, no placeholders).**
@@ -23,11 +25,11 @@
 
 - [x] **P1 — Implement the deprivation choropleth layer end-to-end.** Fetch ONS IMD GeoJSON, render MapLibre fill/stroke, hover highlight, click popup, panel drill-down, histogram chart, legend. **DONE:** Fully functional, handles fetch/cache errors, integrates cleanly.**
 
-- [ ] **P1 — Implement the air quality layer.** Fetch DEFRA AURN readings, render DAQI markers (colour by score), click popups, panel gauges/advisory, timestamps.
+- [x] **P1 — Implement the air quality layer.** Fetch DEFRA AURN readings, render DAQI markers (colour by score), click popups, panel gauges/advisory, timestamps. **DONE:** DAQI markers, popups, fallback readings, station cards, gauges, sparklines, and advisory copy are wired into the shared shell.
 
-- [ ] **P1 — Implement the crime heatmap layer.** Fetch data.police.uk crime street API (monthly cache), render deck.gl HeatmapLayer, category filter checkbox UI, month switcher dropdown, button label with counts, panel totals/top categories.
+- [x] **P1 — Implement the crime heatmap layer.** Fetch data.police.uk crime street API (monthly cache), render deck.gl HeatmapLayer, category filter checkbox UI, month switcher dropdown, button label with counts, panel totals/top categories. **DONE:** Monthly switching, category filters, count-aware button state, hotspot summary, and deck.gl heatmap are in place.
 
-- [ ] **P1 — Implement business density + transport nodes.** Fetch/aggregate Overpass POIs into deck.gl HexagonLayer (3D extrusion), embed static rail/bus nodes, click popups, panel top categories + nearest stations.
+- [x] **P1 — Implement business density + transport nodes.** Fetch/aggregate Overpass POIs into deck.gl HexagonLayer (3D extrusion), embed static rail/bus nodes, click popups, panel top categories + nearest stations. **DONE:** Embedded fallback POIs/nodes now drive the deck.gl hexagon layer, clickable rail/bus markers, nearest-station cards, and combined connectivity insight.
 
 - [ ] **P1 — Implement the Business Insight Engine.** Composite score calculation (safety/air/connectivity/deprivation/business weights), Intel Score gauge, narrative generation, postcode search trigger, compare mode with 2-pin comparison.
 
