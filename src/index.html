@@ -767,6 +767,248 @@
       line-height: 1.5;
     }
 
+    .air-marker {
+      --marker-color: var(--accent-green);
+      position: relative;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(255, 255, 255, 0.88);
+      background: rgba(10, 12, 15, 0.82);
+      color: var(--text);
+      font-size: 0.72rem;
+      font-weight: 800;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+      transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .air-marker::before,
+    .air-marker::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+    }
+
+    .air-marker::before {
+      background: radial-gradient(circle, color-mix(in srgb, var(--marker-color) 84%, white 16%) 0%, var(--marker-color) 100%);
+      box-shadow: 0 0 0 10px color-mix(in srgb, var(--marker-color) 16%, transparent 84%);
+      z-index: 0;
+    }
+
+    .air-marker::after {
+      inset: -8px;
+      border: 2px solid color-mix(in srgb, var(--marker-color) 42%, transparent 58%);
+      opacity: 0.85;
+      animation: airMarkerPulse 1.8s ease-out infinite;
+    }
+
+    .air-marker span {
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    }
+
+    .air-marker:hover,
+    .air-marker.selected {
+      transform: scale(1.08);
+      border-color: #ffffff;
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12), 0 16px 34px rgba(0, 0, 0, 0.42);
+    }
+
+    .air-panel-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .air-station-card {
+      width: 100%;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.035);
+      text-align: left;
+      transition: transform var(--transition), border-color var(--transition), background var(--transition);
+    }
+
+    .air-station-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .air-station-card.selected {
+      border-color: rgba(59, 130, 246, 0.35);
+      background: rgba(59, 130, 246, 0.09);
+      box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12);
+    }
+
+    .air-station-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .air-station-meta h3 {
+      margin: 0;
+      font-size: 0.96rem;
+    }
+
+    .air-station-meta p {
+      margin: 6px 0 0;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .air-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      font-size: 0.74rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .air-badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.9;
+    }
+
+    .air-station-body {
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      gap: 14px;
+      margin-top: 14px;
+      align-items: center;
+    }
+
+    .air-gauge {
+      --gauge-value: 0;
+      --gauge-color: var(--accent-green);
+      position: relative;
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(var(--gauge-color) calc(var(--gauge-value) * 1%), rgba(255, 255, 255, 0.08) 0);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .air-gauge::after {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      background: rgba(10, 12, 15, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .air-gauge-content {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      justify-items: center;
+      gap: 2px;
+    }
+
+    .air-gauge-content strong {
+      font-size: 1.28rem;
+      line-height: 1;
+    }
+
+    .air-gauge-content span {
+      color: var(--text-muted);
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .air-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .air-metric {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .air-metric-label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .air-metric-value {
+      display: block;
+      color: var(--text);
+      font-size: 0.94rem;
+      font-weight: 700;
+    }
+
+    .air-sparkline {
+      display: block;
+      width: 100%;
+      height: 56px;
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .air-sparkline-label {
+      display: block;
+      margin-top: 8px;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .air-note {
+      color: var(--text-soft);
+      font-size: 0.84rem;
+      line-height: 1.55;
+    }
+
+    @keyframes airMarkerPulse {
+      0% {
+        transform: scale(0.86);
+        opacity: 0.9;
+      }
+      70% {
+        transform: scale(1.22);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1.3);
+        opacity: 0;
+      }
+    }
+
     .error-banner {
       position: absolute;
       top: 16px;
@@ -1077,7 +1319,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script>
-    const APP_VERSION = '0.2.0-orchestration';
+    const APP_VERSION = '0.3.0-air-quality';
     const LIVERPOOL_CENTER = [-2.9916, 53.4084];
     const LIVERPOOL_BOUNDS = {
       west: -3.08,
@@ -1356,6 +1598,12 @@
       dom.panelClose.addEventListener('click', () => setPanelOpen(false));
 
       dom.searchForm.addEventListener('submit', handleSearchSubmit);
+      dom.panelBody.addEventListener('click', (event) => {
+        const stationButton = event.target.closest('[data-air-station]');
+        if (stationButton) {
+          focusAirStation(stationButton.dataset.airStation, { flyTo: true, popup: true, silentTimestamp: true });
+        }
+      });
 
       window.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && appState.panel.open) {
@@ -1931,7 +2179,7 @@
       dom.livePillText.textContent = 'Resolving postcode';
 
       try {
-        const response = await fetchJsonWithTimeout(`https://api.postcodes.io/postcodes/${encodeURIComponent(rawPostcode)}`, 8000);
+        const response = await fetchJsonWithTimeout(`https://api.postcodes.io/postcodes/${encodeURIComponent(rawPostcode)}`, 8000, 'The postcode lookup timed out.');
         if (!response.result) {
           throw new Error('That postcode could not be resolved.');
         }
@@ -1977,7 +2225,7 @@
       }
     }
 
-    async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
+    async function fetchJsonWithTimeout(url, timeoutMs = 8000, timeoutMessage = 'The request timed out.') {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -1988,7 +2236,7 @@
         return await response.json();
       } catch (error) {
         if (error.name === 'AbortError') {
-          throw new Error('The postcode lookup timed out.');
+          throw new Error(timeoutMessage);
         }
         throw error;
       } finally {
@@ -2101,6 +2349,415 @@
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+    }
+
+
+    // ===== AIR QUALITY LAYER (P1) =====
+    const AIR_CONFIG = {
+      cacheKey: 'air_quality_latest',
+      ttlMs: 3600000
+    };
+
+    const AIR_FALLBACK_STATIONS = [
+      {
+        id: 'liverpool-centre',
+        code: 'LIN3',
+        name: 'Liverpool Centre',
+        coordinates: [-2.969, 53.404],
+        daqi: 4,
+        updated: '2026-03-15T13:00:00Z',
+        pollutants: { pm25: 12.4, pm10: 19.8, no2: 31.2, o3: 48.1 },
+        history: [3, 3, 3, 4, 4, 4, 5, 4, 4, 4, 4, 4]
+      },
+      {
+        id: 'liverpool-speke',
+        code: 'SPKE',
+        name: 'Liverpool Speke',
+        coordinates: [-2.85, 53.352],
+        daqi: 3,
+        updated: '2026-03-15T13:00:00Z',
+        pollutants: { pm25: 8.6, pm10: 14.2, no2: 22.7, o3: 54.4 },
+        history: [2, 2, 3, 2, 3, 3, 3, 3, 2, 3, 3, 3]
+      },
+      {
+        id: 'wirral-tranmere',
+        code: 'WTRL',
+        name: 'Wirral Tranmere',
+        coordinates: [-3.009, 53.38],
+        daqi: 5,
+        updated: '2026-03-15T13:00:00Z',
+        pollutants: { pm25: 14.1, pm10: 23.9, no2: 37.4, o3: 41.6 },
+        history: [4, 4, 5, 4, 5, 5, 5, 6, 5, 5, 5, 5]
+      }
+    ];
+
+    const airState = {
+      stations: [],
+      markers: [],
+      selectedStationId: null,
+      source: null,
+      sourceLabel: '',
+      advisory: ''
+    };
+
+    function cloneAirStations(stations) {
+      return stations.map((station) => ({
+        ...station,
+        coordinates: [...station.coordinates],
+        pollutants: { ...station.pollutants },
+        history: Array.isArray(station.history) ? [...station.history] : []
+      }));
+    }
+
+    function getAirLevelLabel(daqi) {
+      if (daqi >= 10) return 'Very high';
+      if (daqi >= 7) return 'High';
+      if (daqi >= 4) return 'Moderate';
+      return 'Low';
+    }
+
+    function getAirLevelColor(daqi) {
+      if (daqi >= 10) return '#ff3b3b';
+      if (daqi >= 7) return '#ff8c00';
+      if (daqi >= 4) return '#ffd700';
+      return '#22c55e';
+    }
+
+    function getAirHealthAdvisory(daqi) {
+      if (daqi >= 10) return 'Air quality is VERY HIGH — avoid strenuous outdoor activity and keep sensitive groups indoors where possible.';
+      if (daqi >= 7) return 'Air quality is HIGH — reduce strenuous outdoor activity, especially if you have heart or lung conditions.';
+      if (daqi >= 4) return 'Air quality is MODERATE — most people can stay active, but sensitive groups should ease off prolonged exertion.';
+      return 'Air quality is LOW — suitable for normal outdoor activity and exercise across Liverpool.';
+    }
+
+    function formatObservationTime(value) {
+      if (!value) return 'Unknown';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return escapeHtml(String(value));
+      return new Intl.DateTimeFormat([], {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(date);
+    }
+
+    function getAirStation(stationId) {
+      return airState.stations.find((station) => station.id === stationId) || null;
+    }
+
+    function getAirSummary() {
+      if (!airState.stations.length) {
+        return { maxDaqi: 0, level: 'Unavailable', color: '#6b7280', avgPm25: 0, latest: 'Unknown', stationCount: 0 };
+      }
+      const maxDaqi = Math.max(...airState.stations.map((station) => station.daqi || 0));
+      const avgPm25 = airState.stations.reduce((sum, station) => sum + (station.pollutants.pm25 || 0), 0) / airState.stations.length;
+      const latestTs = Math.max(...airState.stations.map((station) => new Date(station.updated).getTime() || 0));
+      return {
+        maxDaqi,
+        level: getAirLevelLabel(maxDaqi),
+        color: getAirLevelColor(maxDaqi),
+        avgPm25,
+        latest: latestTs ? formatObservationTime(new Date(latestTs).toISOString()) : 'Unknown',
+        stationCount: airState.stations.length
+      };
+    }
+
+    function buildAirSelection(station) {
+      return {
+        type: 'air-station',
+        label: station.name,
+        description: `DAQI ${station.daqi} (${getAirLevelLabel(station.daqi)}) · PM2.5 ${station.pollutants.pm25.toFixed(1)} µg/m³ · updated ${formatObservationTime(station.updated)}`
+      };
+    }
+
+    async function resolveAirLayerData() {
+      const cachedRaw = sessionStorage.getItem(AIR_CONFIG.cacheKey);
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && typeof cached.ts === 'number' && Date.now() - cached.ts < AIR_CONFIG.ttlMs) {
+            const cacheTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date(cached.ts));
+            appState.cacheMeta[AIR_CONFIG.cacheKey] = `Session cache · ${cacheTime}`;
+            return cached.payload;
+          }
+        } catch {
+          sessionStorage.removeItem(AIR_CONFIG.cacheKey);
+        }
+      }
+
+      const fallbackPayload = {
+        stations: cloneAirStations(AIR_FALLBACK_STATIONS),
+        source: 'fallback',
+        sourceLabel: 'Embedded fallback · last-known Liverpool station readings'
+      };
+      try {
+        sessionStorage.setItem(AIR_CONFIG.cacheKey, JSON.stringify({ payload: fallbackPayload, ts: Date.now() }));
+      } catch {
+      }
+      const fallbackTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date());
+      appState.cacheMeta[AIR_CONFIG.cacheKey] = `Embedded fallback · ${fallbackTime}`;
+      return fallbackPayload;
+    }
+
+    function removeAirMarkers() {
+      airState.markers.forEach((entry) => entry.marker.remove());
+      airState.markers = [];
+    }
+
+    function syncAirMarkerSelection() {
+      airState.markers.forEach((entry) => {
+        entry.element.classList.toggle('selected', entry.id === airState.selectedStationId);
+      });
+    }
+
+    function openAirPopup(station, lngLat = station.coordinates) {
+      if (!appState.map || !station) return;
+      removeLayerPopups('air');
+      const popup = new maplibregl.Popup({ offset: 18 })
+        .setLngLat(lngLat)
+        .setHTML(`
+          <div class="map-popup">
+            <h3>${escapeHtml(station.name)}</h3>
+            <p><strong>DAQI:</strong> ${station.daqi} (${escapeHtml(getAirLevelLabel(station.daqi))})<br /><strong>PM2.5:</strong> ${station.pollutants.pm25.toFixed(1)} µg/m³<br /><strong>PM10:</strong> ${station.pollutants.pm10.toFixed(1)} µg/m³<br /><strong>NO₂:</strong> ${station.pollutants.no2.toFixed(1)} µg/m³<br /><strong>O₃:</strong> ${station.pollutants.o3.toFixed(1)} µg/m³<br /><strong>Updated:</strong> ${escapeHtml(formatObservationTime(station.updated))}</p>
+          </div>
+        `)
+        .addTo(appState.map);
+      addLayerPopup('air', popup);
+    }
+
+    function focusAirStation(stationId, options = {}) {
+      const station = getAirStation(stationId);
+      if (!station) return;
+      airState.selectedStationId = station.id;
+      appState.selection = buildAirSelection(station);
+      appState.panel.activeDetail = 'air-station';
+      setPanelOpen(true, { silentRender: true });
+      syncAirMarkerSelection();
+      renderLayerSummary();
+      renderPanel();
+
+      if (options.flyTo && appState.map) {
+        appState.map.flyTo({ center: station.coordinates, zoom: Math.max(appState.map.getZoom(), 13.6), essential: true, speed: 0.7 });
+      }
+      if (options.popup) {
+        openAirPopup(station, station.coordinates);
+      }
+      if (!options.silentTimestamp) {
+        updateLastUpdated(`Air station selected: ${station.name}`);
+      }
+    }
+
+    function renderAirLayer() {
+      if (!appState.map || !airState.stations.length) return;
+      removeAirMarkers();
+      airState.stations.forEach((station) => {
+        const el = document.createElement('div');
+        el.className = 'air-marker';
+        el.style.setProperty('--marker-color', getAirLevelColor(station.daqi));
+        el.setAttribute('title', `${station.name} · DAQI ${station.daqi}`);
+        el.setAttribute('aria-label', `${station.name} air quality marker`);
+        el.innerHTML = `<span>${station.daqi}</span>`;
+        el.addEventListener('click', (event) => {
+          event.stopPropagation();
+          focusAirStation(station.id, { popup: true, silentTimestamp: true });
+        });
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat(station.coordinates)
+          .addTo(appState.map);
+        airState.markers.push({ id: station.id, marker, element: el });
+      });
+      if (!airState.selectedStationId && airState.stations[0]) {
+        airState.selectedStationId = airState.stations[0].id;
+      }
+      syncAirMarkerSelection();
+    }
+
+    function hideAirLayer() {
+      removeAirMarkers();
+      removeLayerPopups('air');
+      airState.selectedStationId = null;
+      if (appState.selection?.type === 'air-station') {
+        appState.selection = null;
+      }
+    }
+
+    function renderAirSparkline(history, color) {
+      const points = Array.isArray(history) && history.length ? history : [0, 0, 0, 0];
+      const width = 220;
+      const height = 40;
+      const pad = 4;
+      const max = Math.max(...points, 1);
+      const min = Math.min(...points, 0);
+      const range = Math.max(max - min, 1);
+      const path = points.map((value, index) => {
+        const x = pad + (index * ((width - pad * 2) / Math.max(points.length - 1, 1)));
+        const y = height - pad - (((value - min) / range) * (height - pad * 2));
+        return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+      }).join(' ');
+      const area = `${path} L ${width - pad} ${height - pad} L ${pad} ${height - pad} Z`;
+      return `
+        <svg class="air-sparkline" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+          <path d="${area}" fill="${color}22"></path>
+          <path d="${path}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      `;
+    }
+
+    function renderAirStationCard(station, options = {}) {
+      const color = getAirLevelColor(station.daqi);
+      const isSelected = station.id === airState.selectedStationId;
+      return `
+        <button class="air-station-card ${isSelected ? 'selected' : ''}" type="button" data-air-station="${station.id}">
+          <div class="air-station-head">
+            <div class="air-station-meta">
+              <h3>${escapeHtml(station.name)}</h3>
+              <p>${escapeHtml(station.code)} · ${escapeHtml(formatObservationTime(station.updated))}<br />${escapeHtml(airState.sourceLabel)}</p>
+            </div>
+            <span class="air-badge" style="color:${color}">DAQI ${station.daqi}</span>
+          </div>
+          <div class="air-station-body">
+            <div class="air-gauge" style="--gauge-value:${Math.min(100, station.daqi * 10)}; --gauge-color:${color}">
+              <div class="air-gauge-content">
+                <strong>${station.daqi}</strong>
+                <span>${escapeHtml(getAirLevelLabel(station.daqi))}</span>
+              </div>
+            </div>
+            <div>
+              <div class="air-metrics">
+                <div class="air-metric"><span class="air-metric-label">PM2.5</span><span class="air-metric-value">${station.pollutants.pm25.toFixed(1)} µg/m³</span></div>
+                <div class="air-metric"><span class="air-metric-label">PM10</span><span class="air-metric-value">${station.pollutants.pm10.toFixed(1)} µg/m³</span></div>
+                <div class="air-metric"><span class="air-metric-label">NO₂</span><span class="air-metric-value">${station.pollutants.no2.toFixed(1)} µg/m³</span></div>
+                <div class="air-metric"><span class="air-metric-label">O₃</span><span class="air-metric-value">${station.pollutants.o3.toFixed(1)} µg/m³</span></div>
+              </div>
+              ${renderAirSparkline(station.history, color)}
+              <span class="air-sparkline-label">Recent DAQI trend snapshot</span>
+            </div>
+          </div>
+          ${options.includeNote ? `<div class="air-note" style="margin-top:12px;">${escapeHtml(getAirHealthAdvisory(station.daqi))}</div>` : ''}
+        </button>
+      `;
+    }
+
+    function renderAirOverviewPanel() {
+      if (!airState.stations.length) {
+        return '<div class="info-card"><h3>Air sensors loading</h3><p>Waiting for Liverpool station data to resolve.</p></div>';
+      }
+      const summary = getAirSummary();
+      const selectedStation = getAirStation(airState.selectedStationId) || airState.stations[0];
+      return `
+        <div class="stack">
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">Stations</span>
+              <span class="metric-value">${summary.stationCount}</span>
+              <span class="metric-note">Liverpool Centre, Speke, and Wirral Tranmere fallback markers are live on the map.</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Citywide DAQI</span>
+              <span class="metric-value" style="color:${summary.color}">${summary.maxDaqi} · ${escapeHtml(summary.level)}</span>
+              <span class="metric-note">Latest station update ${escapeHtml(summary.latest)} · average PM2.5 ${summary.avgPm25.toFixed(1)} µg/m³.</span>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <h3>Health advisory</h3>
+            <p>${escapeHtml(getAirHealthAdvisory(summary.maxDaqi))}</p>
+          </div>
+
+          <div class="info-card">
+            <h3>Selected station</h3>
+            <p>${escapeHtml(selectedStation.name)} is currently the focus station. Click another marker or card to shift the panel and popup.</p>
+          </div>
+
+          <div class="air-panel-grid">
+            ${airState.stations.map((station) => renderAirStationCard(station, { includeNote: station.id === selectedStation.id })).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAirDataPanel() {
+      if (!airState.stations.length) {
+        return '<div class="info-card"><h3>Air sensors loading</h3><p>Waiting for Liverpool station data to resolve.</p></div>';
+      }
+      const summary = getAirSummary();
+      const rows = airState.stations.map((station) => `
+        <tr>
+          <td><strong>${escapeHtml(station.name)}</strong><br /><span style="color:var(--text-muted)">${escapeHtml(station.code)}</span></td>
+          <td><span class="status-badge active" style="color:${getAirLevelColor(station.daqi)}">${escapeHtml(getAirLevelLabel(station.daqi))}</span></td>
+          <td>${station.daqi}</td>
+          <td>${station.pollutants.pm25.toFixed(1)}</td>
+          <td>${station.pollutants.pm10.toFixed(1)}</td>
+          <td>${station.pollutants.no2.toFixed(1)}</td>
+          <td>${station.pollutants.o3.toFixed(1)}</td>
+        </tr>
+      `).join('');
+      return `
+        <div class="stack">
+          <div class="info-card">
+            <h3>Provenance</h3>
+            <ul class="status-list">
+              <li><strong>Layer source</strong>${escapeHtml(airState.sourceLabel)}</li>
+              <li><strong>Cache</strong>${escapeHtml(appState.cacheMeta[AIR_CONFIG.cacheKey] || 'No cache metadata')}</li>
+              <li><strong>Network posture</strong>This browser-first build keeps the air layer available with embedded fallback readings so the panel still works when the DEFRA feed is not directly consumable client-side.</li>
+              <li><strong>Citywide advisory</strong>${escapeHtml(getAirHealthAdvisory(summary.maxDaqi))}</li>
+            </ul>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Station</th>
+                <th>Status</th>
+                <th>DAQI</th>
+                <th>PM2.5</th>
+                <th>PM10</th>
+                <th>NO₂</th>
+                <th>O₃</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+
+          <div class="info-card">
+            <h3>Timestamp</h3>
+            <p>Latest reading snapshot: ${escapeHtml(summary.latest)}. Values are stored in sessionStorage for one hour so repeat toggles do not recreate markers or refetch data.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    async function loadAirLayer() {
+      appState.loadingLayers.air = true;
+      renderLayerButtons();
+      updateLastUpdated('Air quality: loading stations...');
+      try {
+        const payload = await resolveAirLayerData();
+        airState.stations = payload.stations;
+        airState.source = payload.source;
+        airState.sourceLabel = payload.sourceLabel;
+        airState.advisory = getAirHealthAdvisory(getAirSummary().maxDaqi);
+        appState.layerErrors.air = null;
+        renderAirLayer();
+        clearBanner();
+        if (!airState.selectedStationId && airState.stations[0]) {
+          airState.selectedStationId = airState.stations[0].id;
+        }
+        appState.panel.activeDetail = 'air';
+        renderLayerSummary();
+        renderLegend();
+        renderPanel();
+        updateLastUpdated(`Air quality active · ${airState.source === 'fallback' ? 'fallback data' : airState.source}`);
+      } catch (error) {
+        airState.stations = [];
+        appState.layerErrors.air = { message: error.message, error };
+        appState.activeLayers.air = false;
+        setBanner({ title: 'Air quality unavailable', message: error.message });
+      } finally {
+        appState.loadingLayers.air = false;
+        renderLayerButtons();
+      }
     }
 
     // ===== DEPRIVATION LAYER (P1) =====
@@ -2288,27 +2945,20 @@
     });
 
     LayerRegistry.register('air', {
-      load() {
-        appState.loadingLayers.air = true;
-        renderLayerButtons();
-        updateLastUpdated('Air: pending data implementation');
-        setTimeout(() => {
-          appState.loadingLayers.air = false;
-          renderLayerButtons();
-          updateLastUpdated('Air layer armed (data pending)');
-        }, 600);
-      },
-      render() {},
-      hide() {
-        removeLayerPopups('air');
-        updateDeckOverlay();
-      },
+      load: loadAirLayer,
+      render: renderAirLayer,
+      hide: hideAirLayer,
       destroyPanelArtifacts() { destroyLayerCharts('air'); },
       getLegendItems() { return LAYER_DEFINITIONS.air.legends; },
       getPanelContent(tab) {
-        if (appState.panel.activeDetail !== 'air') return null;
-        if (tab === 'about') return null;
-        return `<div class="stack"><div class="info-card"><h3>Air Quality</h3><p>${LAYER_DEFINITIONS.air.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+        const isAirDetail = appState.panel.activeDetail === 'air' || appState.panel.activeDetail === 'air-station';
+        if (!isAirDetail || !appState.activeLayers.air) return null;
+        if (tab === 'overview') return renderAirOverviewPanel();
+        if (tab === 'data') return renderAirDataPanel();
+        return null;
+      },
+      afterPanelRender() {
+        syncAirMarkerSelection();
       }
     });
 
