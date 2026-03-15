@@ -1077,7 +1077,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script>
-    const APP_VERSION = '0.1.0-shell';
+    const APP_VERSION = '0.2.0-orchestration';
     const LIVERPOOL_CENTER = [-2.9916, 53.4084];
     const LIVERPOOL_BOUNDS = {
       west: -3.08,
@@ -1195,8 +1195,109 @@
         result: null
       },
       systemError: null,
-      banner: null
+      banner: null,
+      popups: {}
     };
+
+    const LayerRegistry = {
+      _modules: {},
+      register(key, mod) {
+        const requiredMethods = ['load', 'hide', 'destroyPanelArtifacts', 'getLegendItems', 'getPanelContent'];
+        const missing = requiredMethods.filter((method) => typeof mod?.[method] !== 'function');
+        if (missing.length) {
+          throw new Error(`Layer module "${key}" missing required methods: ${missing.join(', ')}`);
+        }
+        this._modules[key] = mod;
+      },
+      get(key) { return this._modules[key]; },
+      has(key) { return key in this._modules; },
+      keys() { return Object.keys(this._modules); }
+    };
+
+    async function cachedFetch(url, cacheKey, ttlMs = 3600000, timeoutMs = 12000) {
+      const cachedRaw = sessionStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && typeof cached.ts === 'number' && Date.now() - cached.ts < ttlMs) {
+            const cacheTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date(cached.ts));
+            appState.cacheMeta[cacheKey] = `Session cache · ${cacheTime}`;
+            return { data: cached.payload, source: 'cache' };
+          }
+        } catch {
+          sessionStorage.removeItem(cacheKey);
+        }
+      }
+
+      const data = await fetchJsonWithTimeout(url, timeoutMs);
+      const liveTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date());
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify({ payload: data, ts: Date.now() }));
+      } catch {
+      }
+      appState.cacheMeta[cacheKey] = `Live fetch · ${liveTime}`;
+      return { data, source: 'live' };
+    }
+
+    function addLayerPopup(layerKey, popup) {
+      if (!popup) return;
+      if (!Array.isArray(appState.popups[layerKey])) {
+        appState.popups[layerKey] = [];
+      }
+      appState.popups[layerKey].push(popup);
+    }
+
+    function removeLayerPopups(layerKey) {
+      const popups = appState.popups[layerKey];
+      if (!Array.isArray(popups) || !popups.length) return;
+      popups.forEach((popup) => {
+        if (popup && typeof popup.remove === 'function') {
+          popup.remove();
+        }
+      });
+      appState.popups[layerKey] = [];
+    }
+
+    function removeAllPopups() {
+      Object.keys(appState.popups).forEach((key) => removeLayerPopups(key));
+    }
+
+    function updateDeckOverlay() {
+      if (!appState.deckOverlay) return;
+      const deckLayers = [];
+      for (const key of Object.keys(appState.activeLayers)) {
+        if (appState.activeLayers[key] && LayerRegistry.has(key)) {
+          const mod = LayerRegistry.get(key);
+          if (typeof mod.getDeckLayers === 'function') {
+            deckLayers.push(...mod.getDeckLayers());
+          }
+        }
+      }
+      appState.deckOverlay.setProps({ layers: deckLayers });
+    }
+
+    function destroyLayerCharts(layerKey) {
+      const entry = appState.charts[layerKey];
+      if (!entry) return;
+      if (typeof entry.destroy === 'function') {
+        entry.destroy();
+      } else if (typeof entry === 'object') {
+        Object.values(entry).forEach((chart) => {
+          if (chart && typeof chart.destroy === 'function') {
+            chart.destroy();
+          }
+        });
+      }
+      appState.charts[layerKey] = null;
+    }
+
+    function destroyAllLayerCharts() {
+      Object.keys(appState.charts).forEach((key) => {
+        if (key !== 'overview') {
+          destroyLayerCharts(key);
+        }
+      });
+    }
 
     const dom = {};
 
@@ -1384,7 +1485,19 @@
       }
 
       dom.legendIntro.textContent = `${activeKeys.length} layer${activeKeys.length === 1 ? '' : 's'} visible. Legend entries mirror the configured map symbology.`;
-      const items = activeKeys.flatMap((key) => LAYER_DEFINITIONS[key].legends.map((legend) => ({ layer: LAYER_DEFINITIONS[key].short, ...legend })));
+      const items = activeKeys.flatMap((key) => {
+        let legends = LAYER_DEFINITIONS[key].legends;
+        if (LayerRegistry.has(key)) {
+          const mod = LayerRegistry.get(key);
+          if (typeof mod.getLegendItems === 'function') {
+            const moduleLegends = mod.getLegendItems();
+            if (Array.isArray(moduleLegends) && moduleLegends.length) {
+              legends = moduleLegends;
+            }
+          }
+        }
+        return legends.map((legend) => ({ layer: LAYER_DEFINITIONS[key].short, ...legend }));
+      });
       dom.legendContent.innerHTML = `
         <div class="legend-items">
           ${items.map((item) => {
@@ -1405,6 +1518,23 @@
     function renderPanel() {
       updatePanelChrome();
       destroyOverviewChart();
+
+      const detailKey = appState.panel.activeDetail;
+      const detailRoot = typeof detailKey === 'string' && detailKey.includes('-') ? detailKey.split('-')[0] : null;
+      const moduleKey = LayerRegistry.has(detailKey) ? detailKey : detailRoot && LayerRegistry.has(detailRoot) ? detailRoot : null;
+      if (moduleKey) {
+        const mod = LayerRegistry.get(moduleKey);
+        if (typeof mod.getPanelContent === 'function') {
+          const layerHtml = mod.getPanelContent(appState.panel.tab);
+          if (layerHtml) {
+            dom.panelBody.innerHTML = layerHtml;
+            if (typeof mod.afterPanelRender === 'function') {
+              requestAnimationFrame(() => mod.afterPanelRender(appState.panel.tab));
+            }
+            return;
+          }
+        }
+      }
 
       if (appState.panel.tab === 'overview') {
         dom.panelBody.innerHTML = renderOverviewTab();
@@ -1741,6 +1871,19 @@
       };
       setPanelOpen(true, { silentRender: true });
       updateLastUpdated(`${LAYER_DEFINITIONS[key].short} ${appState.activeLayers[key] ? 'enabled' : 'disabled'}`);
+
+      if (appState.activeLayers[key] && LayerRegistry.has(key)) {
+        LayerRegistry.get(key).load();
+      }
+
+      if (!appState.activeLayers[key] && LayerRegistry.has(key)) {
+        const mod = LayerRegistry.get(key);
+        mod.hide();
+        mod.destroyPanelArtifacts();
+        removeLayerPopups(key);
+      }
+
+      updateDeckOverlay();
       renderLayerButtons();
       renderLayerSummary();
       renderLegend();
@@ -1757,7 +1900,7 @@
       updateLastUpdated('Map context captured');
 
       if (appState.map) {
-        new maplibregl.Popup({ offset: 18 })
+        const popup = new maplibregl.Popup({ offset: 18 })
           .setLngLat([lngLat.lng, lngLat.lat])
           .setHTML(`
             <div class="map-popup">
@@ -1766,6 +1909,7 @@
             </div>
           `)
           .addTo(appState.map);
+        addLayerPopup('_system', popup);
       }
     }
 
@@ -1803,7 +1947,7 @@
 
         if (appState.map) {
           appState.map.flyTo({ center: [lng, lat], zoom: 14.5, essential: true, speed: 0.8 });
-          new maplibregl.Popup({ offset: 16 })
+          const popup = new maplibregl.Popup({ offset: 16 })
             .setLngLat([lng, lat])
             .setHTML(`
               <div class="map-popup">
@@ -1812,6 +1956,7 @@
               </div>
             `)
             .addTo(appState.map);
+          addLayerPopup('_system', popup);
         }
 
         setPanelOpen(true, { silentRender: true });
@@ -1973,23 +2118,10 @@
       renderLayerButtons();
       updateLastUpdated('Deprivation: fetching...');
       try {
-        let data = null;
-        const cached = sessionStorage.getItem(DEPRIVATION_CONFIG.cacheKey);
-        if (cached) {
-          const { payload, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < 3600000) {
-            data = payload;
-            appState.cacheMeta.deprivation_lsoa = 'From session cache (1 hour TTL)';
-          }
-        }
-        if (!data) {
-          const response = await fetchJsonWithTimeout(DEPRIVATION_CONFIG.fetchUrl, 12000);
-          if (!response.features || response.features.length === 0) throw new Error('No features returned');
-          data = response;
-          sessionStorage.setItem(DEPRIVATION_CONFIG.cacheKey, JSON.stringify({ payload: data, timestamp: Date.now() }));
-          appState.cacheMeta.deprivation_lsoa = `Fresh: ${data.features.length} LSOAs`;
-        }
+        const { data } = await cachedFetch(DEPRIVATION_CONFIG.fetchUrl, DEPRIVATION_CONFIG.cacheKey);
+        if (!data.features || data.features.length === 0) throw new Error('No features returned');
         deprivationState.data = data;
+        appState.layerErrors.deprivation = null;
         renderDeprivationMapLayer();
         computeDeprivationHistogram();
         appState.loadingLayers.deprivation = false;
@@ -2042,7 +2174,8 @@
           appState.selection = { type: 'deprivation-lsoa', label: f.properties.LSOA19NM || 'LSOA', description: `Decile ${f.properties.IMD19_DECILE || '?'}` };
           setPanelOpen(true, { silentRender: true });
           renderPanel();
-          new maplibregl.Popup({ offset: 16 }).setLngLat(e.lngLat).setHTML(`<div class="map-popup"><h3>${escapeHtml(f.properties.LSOA19NM || 'LSOA')}</h3><p><strong>Decile:</strong> ${f.properties.IMD19_DECILE}<br><strong>Rank:</strong> ${f.properties.IMD19_RANK}</p></div>`).addTo(map);
+          const popup = new maplibregl.Popup({ offset: 16 }).setLngLat(e.lngLat).setHTML(`<div class="map-popup"><h3>${escapeHtml(f.properties.LSOA19NM || 'LSOA')}</h3><p><strong>Decile:</strong> ${f.properties.IMD19_DECILE}<br><strong>Rank:</strong> ${f.properties.IMD19_RANK}</p></div>`).addTo(map);
+          addLayerPopup('deprivation', popup);
         }
       });
     }
@@ -2099,58 +2232,185 @@
       });
     }
 
-    const layerModules = {
-      deprivation: {
-        load: loadDeprivationLayer,
-        hide: hideDeprivationLayer,
-        getLegendItems: () => [
+    LayerRegistry.register('deprivation', {
+      load: loadDeprivationLayer,
+      render: renderDeprivationMapLayer,
+      hide: hideDeprivationLayer,
+      destroyPanelArtifacts() {
+        if (appState.charts.deprivationHistogram) {
+          appState.charts.deprivationHistogram.destroy();
+          appState.charts.deprivationHistogram = null;
+        }
+      },
+      getLegendItems() {
+        return [
           { type: 'chip', label: 'Decile 1–2', color: '#dc2626' },
           { type: 'chip', label: 'Decile 3–4', color: '#f97316' },
           { type: 'chip', label: 'Decile 5–6', color: '#eab308' },
           { type: 'chip', label: 'Decile 7–8', color: '#84cc16' },
           { type: 'chip', label: 'Decile 9–10', color: '#22c55e' }
-        ]
-      }
-    };
-
-    const baseToggleLayer = toggleLayer;
-    toggleLayer = function(key) {
-      appState.activeLayers[key] = !appState.activeLayers[key];
-      appState.panel.activeDetail = key;
-      appState.selection = { type: 'layer-focus', label: LAYER_DEFINITIONS[key].label, description: LAYER_DEFINITIONS[key].detail };
-      setPanelOpen(true, { silentRender: true });
-      updateLastUpdated(`${LAYER_DEFINITIONS[key].short} ${appState.activeLayers[key] ? 'enabled' : 'disabled'}`);
-      if (appState.activeLayers[key] && layerModules[key]?.load) layerModules[key].load();
-      else if (!appState.activeLayers[key] && layerModules[key]?.hide) layerModules[key].hide();
-      renderLayerButtons();
-      renderLayerSummary();
-      renderLegend();
-      renderPanel();
-    };
-
-    const baseRenderPanel = renderPanel;
-    renderPanel = function() {
-      updatePanelChrome();
-      destroyOverviewChart();
-      if ((appState.panel.activeDetail === 'deprivation' || appState.panel.activeDetail === 'deprivation-lsoa') && (appState.panel.tab === 'overview' || appState.panel.tab === 'data')) {
-        dom.panelBody.innerHTML = renderDeprivationPanelContent();
-        requestAnimationFrame(() => renderDeprivationHistogram());
-        return;
-      }
-      baseRenderPanel();
-    };
-
-    const baseRenderLegend = renderLegend;
-    renderLegend = function() {
-      baseRenderLegend();
-      if (appState.activeLayers.deprivation && layerModules.deprivation?.getLegendItems) {
-        const content = document.getElementById('legend-content');
-        if (content) {
-          const items = layerModules.deprivation.getLegendItems();
-          content.innerHTML += `<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.08)"><div class="legend-items">${items.map(i => `<div class="legend-item"><span class="legend-chip" style="background:${i.color}"></span><div><strong>Deprivation</strong> ${escapeHtml(i.label)}</div></div>`).join('')}</div></div>`;
+        ];
+      },
+      getPanelContent(tab) {
+        if (appState.panel.activeDetail === 'deprivation' || appState.panel.activeDetail === 'deprivation-lsoa') {
+          if (tab === 'overview' || tab === 'data') return renderDeprivationPanelContent();
         }
+        return null;
+      },
+      afterPanelRender(tab) {
+        if (tab === 'overview' || tab === 'data') renderDeprivationHistogram();
       }
-    };
+    });
+
+    LayerRegistry.register('crime', {
+      load() {
+        appState.loadingLayers.crime = true;
+        renderLayerButtons();
+        updateLastUpdated('Crime: pending data implementation');
+        setTimeout(() => {
+          appState.loadingLayers.crime = false;
+          renderLayerButtons();
+          updateLastUpdated('Crime layer armed (data pending)');
+        }, 600);
+      },
+      render() {},
+      hide() {
+        removeLayerPopups('crime');
+        updateDeckOverlay();
+      },
+      destroyPanelArtifacts() { destroyLayerCharts('crime'); },
+      getLegendItems() { return LAYER_DEFINITIONS.crime.legends; },
+      getPanelContent(tab) {
+        if (appState.panel.activeDetail !== 'crime') return null;
+        if (tab === 'about') return null;
+        return `<div class="stack"><div class="info-card"><h3>Crime Heatmap</h3><p>${LAYER_DEFINITIONS.crime.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+      }
+    });
+
+    LayerRegistry.register('air', {
+      load() {
+        appState.loadingLayers.air = true;
+        renderLayerButtons();
+        updateLastUpdated('Air: pending data implementation');
+        setTimeout(() => {
+          appState.loadingLayers.air = false;
+          renderLayerButtons();
+          updateLastUpdated('Air layer armed (data pending)');
+        }, 600);
+      },
+      render() {},
+      hide() {
+        removeLayerPopups('air');
+        updateDeckOverlay();
+      },
+      destroyPanelArtifacts() { destroyLayerCharts('air'); },
+      getLegendItems() { return LAYER_DEFINITIONS.air.legends; },
+      getPanelContent(tab) {
+        if (appState.panel.activeDetail !== 'air') return null;
+        if (tab === 'about') return null;
+        return `<div class="stack"><div class="info-card"><h3>Air Quality</h3><p>${LAYER_DEFINITIONS.air.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+      }
+    });
+
+    LayerRegistry.register('business', {
+      load() {
+        appState.loadingLayers.business = true;
+        renderLayerButtons();
+        updateLastUpdated('Business: pending data implementation');
+        setTimeout(() => {
+          appState.loadingLayers.business = false;
+          renderLayerButtons();
+          updateLastUpdated('Business layer armed (data pending)');
+        }, 600);
+      },
+      render() {},
+      hide() {
+        removeLayerPopups('business');
+        updateDeckOverlay();
+      },
+      destroyPanelArtifacts() { destroyLayerCharts('business'); },
+      getLegendItems() { return LAYER_DEFINITIONS.business.legends; },
+      getPanelContent(tab) {
+        if (appState.panel.activeDetail !== 'business') return null;
+        if (tab === 'about') return null;
+        return `<div class="stack"><div class="info-card"><h3>Business Density</h3><p>${LAYER_DEFINITIONS.business.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+      }
+    });
+
+    LayerRegistry.register('transport', {
+      load() {
+        appState.loadingLayers.transport = true;
+        renderLayerButtons();
+        updateLastUpdated('Transport: pending data implementation');
+        setTimeout(() => {
+          appState.loadingLayers.transport = false;
+          renderLayerButtons();
+          updateLastUpdated('Transport layer armed (data pending)');
+        }, 600);
+      },
+      render() {},
+      hide() {
+        removeLayerPopups('transport');
+        updateDeckOverlay();
+      },
+      destroyPanelArtifacts() { destroyLayerCharts('transport'); },
+      getLegendItems() { return LAYER_DEFINITIONS.transport.legends; },
+      getPanelContent(tab) {
+        if (appState.panel.activeDetail !== 'transport') return null;
+        if (tab === 'about') return null;
+        return `<div class="stack"><div class="info-card"><h3>Transport Nodes</h3><p>${LAYER_DEFINITIONS.transport.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+      }
+    });
+
+    LayerRegistry.register('planning', {
+      load() {
+        appState.loadingLayers.planning = true;
+        renderLayerButtons();
+        updateLastUpdated('Planning: pending data implementation');
+        setTimeout(() => {
+          appState.loadingLayers.planning = false;
+          renderLayerButtons();
+          updateLastUpdated('Planning layer armed (data pending)');
+        }, 600);
+      },
+      render() {},
+      hide() {
+        removeLayerPopups('planning');
+        updateDeckOverlay();
+      },
+      destroyPanelArtifacts() { destroyLayerCharts('planning'); },
+      getLegendItems() { return LAYER_DEFINITIONS.planning.legends; },
+      getPanelContent(tab) {
+        if (appState.panel.activeDetail !== 'planning') return null;
+        if (tab === 'about') return null;
+        return `<div class="stack"><div class="info-card"><h3>Planning Applications</h3><p>${LAYER_DEFINITIONS.planning.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+      }
+    });
+
+    LayerRegistry.register('flood', {
+      load() {
+        appState.loadingLayers.flood = true;
+        renderLayerButtons();
+        updateLastUpdated('Flood: pending data implementation');
+        setTimeout(() => {
+          appState.loadingLayers.flood = false;
+          renderLayerButtons();
+          updateLastUpdated('Flood layer armed (data pending)');
+        }, 600);
+      },
+      render() {},
+      hide() {
+        removeLayerPopups('flood');
+        updateDeckOverlay();
+      },
+      destroyPanelArtifacts() { destroyLayerCharts('flood'); },
+      getLegendItems() { return LAYER_DEFINITIONS.flood.legends; },
+      getPanelContent(tab) {
+        if (appState.panel.activeDetail !== 'flood') return null;
+        if (tab === 'about') return null;
+        return `<div class="stack"><div class="info-card"><h3>Flood Risk</h3><p>${LAYER_DEFINITIONS.flood.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+      }
+    });
   </script>
 </body>
 </html>

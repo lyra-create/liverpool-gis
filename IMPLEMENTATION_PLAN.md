@@ -1,16 +1,25 @@
 # IMPLEMENTATION_PLAN.md
 
 ## Confirmed current state (2026-03-15)
-- ✓ `src/index.html` exists: 2156 lines, single-file GIS shell + deprivation layer module
-- ✓ No placeholders, all required libraries loaded (MapLibre, deck.gl, Turf.js, Chart.js)
-- ✓ App state model fully wired: appState tracks map, deckOverlay, layers, errors, cache, panels, selection, charts
-- ✓ Layer orchestration pattern established via `layerModules` registry + function patching
-- ✓ Deprivation layer live: ONS IMD GeoJSON fetch/cache, 5-class choropleth, hover/click popups, histogram, legend
+- ✓ `src/index.html` exists: ~2415 lines, single-file GIS shell + deprivation layer + orchestration infrastructure
+- ✓ No placeholders (TODO/FIXME/PLACEHOLDER), all required libraries loaded (MapLibre 4.7.1, deck.gl 9.1.0, Turf.js 7.0.0, Chart.js 4.4)
+- ✓ `LayerRegistry` with lifecycle contracts: `load`, `hide`, `destroyPanelArtifacts`, `getLegendItems`, `getPanelContent`, `afterPanelRender`, `getDeckLayers`
+- ✓ Shared `cachedFetch()` wraps `fetchJsonWithTimeout` + sessionStorage with `{ payload, ts }` metadata and TTL
+- ✓ Popup tracking per layer key (`addLayerPopup`/`removeLayerPopups`/`removeAllPopups`), cleaned on deactivate
+- ✓ Shared deck overlay management via `updateDeckOverlay()` collecting active registry module deck layers
+- ✓ Chart cleanup helpers: `destroyLayerCharts(key)` targets layer-owned Chart.js instances
+- ✓ `toggleLayer()` routes through registry: activate → `mod.load()`, deactivate → `mod.hide()` + `mod.destroyPanelArtifacts()` + `removeLayerPopups(key)`
+- ✓ `renderLegend()` composes from registry `getLegendItems()`, falls back to `LAYER_DEFINITIONS[key].legends`
+- ✓ `renderPanel()` tries registry `getPanelContent(tab)` first, then falls through to Overview/Data/About
+- ✓ Deprivation layer refactored to register via `LayerRegistry.register('deprivation', {...})` — no monkey-patching
+- ✓ 6 remaining layers (crime, air, business, transport, planning, flood) have stub registrations with lifecycle + panel content
+- ✓ All prior monkey-patching (`baseToggleLayer`, `baseRenderPanel`, `baseRenderLegend`) eliminated
+- ✓ Version: `0.2.0-orchestration`
 
 ## Priority plan
 - [x] **P0 — Build the single-file app shell in `src/index.html`.** MapLibre map, header bar, layer controls, panel (Overview/Data/About tabs), legend, footer, error banner, postcode search, map-click capture, responsive layout. **DONE (2156 lines, no placeholders).**
 
-- [x] **P0 — Establish shared application orchestration.** appState model, per-layer loading/error state, sessionStorage cache metadata, layer lifecycle hooks (load/hide), panel routing, legend composition. **DONE:** Patterns set; deprivation module demonstrates the contract.**
+- [x] **P0 — Establish shared application orchestration.** LayerRegistry with lifecycle contracts (`load`/`hide`/`destroyPanelArtifacts`/`getLegendItems`/`getPanelContent`/`afterPanelRender`/`getDeckLayers`), shared `cachedFetch` with sessionStorage metadata, popup tracking per layer, deck overlay management, chart cleanup helpers. Toggle/legend/panel all route through registry contracts. Monkey-patching eliminated. All 7 layers registered (deprivation fully, 6 stubs). **DONE (v0.2.0-orchestration).**
 
 - [x] **P1 — Implement the deprivation choropleth layer end-to-end.** Fetch ONS IMD GeoJSON, render MapLibre fill/stroke, hover highlight, click popup, panel drill-down, histogram chart, legend. **DONE:** Fully functional, handles fetch/cache errors, integrates cleanly.**
 
