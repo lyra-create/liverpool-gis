@@ -1009,6 +1009,121 @@
       }
     }
 
+
+    .crime-control-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .crime-control-row {
+      display: grid;
+      gap: 10px;
+    }
+
+    .crime-control-row label,
+    .crime-filters-label {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .crime-control-row select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      outline: none;
+    }
+
+    .crime-filter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .crime-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-soft);
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .crime-checkbox input {
+      accent-color: var(--accent-red);
+      width: 16px;
+      height: 16px;
+      margin: 0;
+    }
+
+    .crime-checkbox span:last-child {
+      flex: 1;
+    }
+
+    .crime-checkbox strong {
+      color: var(--text);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .crime-bar-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .crime-bar {
+      display: grid;
+      gap: 8px;
+    }
+
+    .crime-bar-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 0.84rem;
+    }
+
+    .crime-bar-head span {
+      color: var(--text-muted);
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .crime-bar-track {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+    }
+
+    .crime-bar-fill {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.9), rgba(255, 215, 0, 0.95), rgba(255, 59, 59, 0.95));
+    }
+
+    .crime-hotspot {
+      border-color: rgba(255, 59, 59, 0.18);
+      background: linear-gradient(180deg, rgba(255, 59, 59, 0.08), rgba(255, 255, 255, 0.03));
+    }
+
+    .crime-hotspot strong {
+      color: #ffffff;
+    }
+
     .error-banner {
       position: absolute;
       top: 16px;
@@ -1319,7 +1434,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script>
-    const APP_VERSION = '0.3.0-air-quality';
+    const APP_VERSION = '0.4.0-crime-heatmap';
     const LIVERPOOL_CENTER = [-2.9916, 53.4084];
     const LIVERPOOL_BOUNDS = {
       west: -3.08,
@@ -1605,6 +1720,17 @@
         }
       });
 
+      dom.panelBody.addEventListener('change', (event) => {
+        const monthSelect = event.target.closest('[data-crime-month]');
+        if (monthSelect) {
+          setCrimeMonth(monthSelect.value);
+          return;
+        }
+        if (event.target.matches('[data-crime-category]')) {
+          toggleCrimeCategory(event.target.value, event.target.checked);
+        }
+      });
+
       window.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && appState.panel.open) {
           setPanelOpen(false);
@@ -1686,13 +1812,29 @@
       dom.appVersion.textContent = `v${APP_VERSION}`;
     }
 
+    function getLayerButtonState(key) {
+      const layer = LAYER_DEFINITIONS[key];
+      const fallback = {
+        label: appState.layerErrors[key] ? `${layer.short} unavailable` : layer.label,
+        meta: appState.layerErrors[key]?.message || layer.meta
+      };
+      if (!LayerRegistry.has(key)) {
+        return fallback;
+      }
+      const mod = LayerRegistry.get(key);
+      if (typeof mod.getButtonState !== 'function') {
+        return fallback;
+      }
+      const override = mod.getButtonState();
+      return override && typeof override === 'object' ? { ...fallback, ...override } : fallback;
+    }
+
     function renderLayerButtons() {
       dom.layerButtons.innerHTML = Object.entries(LAYER_DEFINITIONS).map(([key, layer]) => {
         const isActive = appState.activeLayers[key];
         const isLoading = appState.loadingLayers[key];
         const hasError = Boolean(appState.layerErrors[key]);
-        const label = hasError ? `${layer.short} unavailable` : layer.label;
-        const meta = hasError ? appState.layerErrors[key].message : layer.meta;
+        const buttonState = getLayerButtonState(key);
 
         return `
           <button
@@ -1703,8 +1845,8 @@
           >
             <span class="layer-dot" style="background:${layer.color}"></span>
             <span class="layer-label">
-              <span class="layer-name">${label}</span>
-              <span class="layer-meta">${meta}</span>
+              <span class="layer-name">${buttonState.label}</span>
+              <span class="layer-meta">${buttonState.meta}</span>
             </span>
             <span class="spinner" aria-hidden="true"></span>
           </button>
@@ -1847,7 +1989,7 @@
 
           <div class="info-card">
             <h3>Layer activity mix</h3>
-            <p>The chart below is intentionally simple: it proves Chart.js lifecycle handling in the single-file shell before the richer deprivation, air, and crime analytics land here.</p>
+            <p>The chart below is intentionally simple: it proves Chart.js lifecycle handling in the single-file shell while the remaining business, transport, planning, and flood analytics continue to land.</p>
             <canvas id="overview-chart" height="220" aria-label="Layer activity chart"></canvas>
           </div>
 
@@ -2351,6 +2493,543 @@
         .replaceAll("'", '&#39;');
     }
 
+
+
+    // ===== CRIME HEATMAP LAYER (P1) =====
+    const CRIME_CONFIG = {
+      cacheTtlMs: 1000 * 60 * 60 * 6,
+      initialMonthOffset: 2,
+      monthCount: 6,
+      fetchLat: 53.4084,
+      fetchLng: -2.9916,
+      heatmapId: 'crime-heatmap'
+    };
+
+    const CRIME_FALLBACK_SEEDS = [
+      {
+        area: 'Liverpool ONE',
+        street: 'South John Street',
+        coordinates: [-2.9868, 53.4017],
+        categories: { shoplifting: 12, 'anti-social-behaviour': 7, 'other-theft': 5 }
+      },
+      {
+        area: 'Lime Street',
+        street: 'Lime Street',
+        coordinates: [-2.9787, 53.4071],
+        categories: { 'violence-and-sexual-offences': 10, 'anti-social-behaviour': 6, 'public-order': 4 }
+      },
+      {
+        area: 'Kensington',
+        street: 'Kensington High Street',
+        coordinates: [-2.9483, 53.4136],
+        categories: { burglary: 7, 'violent-crime': 5, 'criminal-damage-arson': 5 }
+      },
+      {
+        area: 'Toxteth',
+        street: 'Park Road',
+        coordinates: [-2.9779, 53.3874],
+        categories: { drugs: 6, 'vehicle-crime': 5, 'violence-and-sexual-offences': 7 }
+      },
+      {
+        area: 'Anfield',
+        street: 'Walton Breck Road',
+        coordinates: [-2.9604, 53.4317],
+        categories: { 'anti-social-behaviour': 8, 'criminal-damage-arson': 6, 'public-order': 5 }
+      },
+      {
+        area: 'Scotland Road',
+        street: 'Scotland Road',
+        coordinates: [-2.9957, 53.4235],
+        categories: { 'other-theft': 6, robbery: 3, 'vehicle-crime': 4 }
+      }
+    ];
+
+    const CRIME_MONTH_OPTIONS = buildCrimeMonthKeys(CRIME_CONFIG.monthCount, CRIME_CONFIG.initialMonthOffset);
+    const CRIME_FALLBACK_DATA = buildCrimeFallbackData(CRIME_MONTH_OPTIONS);
+
+    const crimeState = {
+      incidents: [],
+      filteredIncidents: [],
+      availableMonths: [...CRIME_MONTH_OPTIONS],
+      selectedMonth: CRIME_MONTH_OPTIONS[0],
+      selectedCategories: [],
+      categoryOptions: [],
+      summary: null,
+      source: null,
+      sourceLabel: ''
+    };
+
+    function buildCrimeMonthKeys(count = 6, startOffset = 2) {
+      const months = [];
+      const now = new Date();
+      for (let index = 0; index < count; index += 1) {
+        const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - startOffset - index, 1));
+        const month = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`;
+        months.push(month);
+      }
+      return months;
+    }
+
+    function formatCrimeMonth(monthKey) {
+      const [year, month] = String(monthKey || '').split('-').map(Number);
+      if (!year || !month) return 'Unknown month';
+      const date = new Date(Date.UTC(year, month - 1, 1));
+      return new Intl.DateTimeFormat([], { month: 'short', year: 'numeric' }).format(date);
+    }
+
+    function humanizeCrimeCategory(category) {
+      const labels = {
+        'anti-social-behaviour': 'Anti-social behaviour',
+        burglary: 'Burglary',
+        'criminal-damage-arson': 'Criminal damage & arson',
+        drugs: 'Drugs',
+        'other-crime': 'Other crime',
+        'other-theft': 'Other theft',
+        'public-order': 'Public order',
+        robbery: 'Robbery',
+        shoplifting: 'Shoplifting',
+        'vehicle-crime': 'Vehicle crime',
+        'violent-crime': 'Violent crime',
+        'violence-and-sexual-offences': 'Violence & sexual offences'
+      };
+      if (labels[category]) {
+        return labels[category];
+      }
+      return String(category || 'other-crime')
+        .split('-')
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+
+    function buildCrimeFallbackData(months) {
+      const data = {};
+      months.forEach((monthKey, monthIndex) => {
+        const incidents = [];
+        CRIME_FALLBACK_SEEDS.forEach((seed, seedIndex) => {
+          Object.entries(seed.categories).forEach(([category, baseCount], categoryIndex) => {
+            const count = Math.max(1, baseCount - (monthIndex % 3) + ((seedIndex + categoryIndex + monthIndex) % 2));
+            for (let step = 0; step < count; step += 1) {
+              const angle = (((step + 1) * 47) + (seedIndex * 61) + (categoryIndex * 29) + (monthIndex * 13)) % 360;
+              const radius = 0.00035 + (((step + categoryIndex + monthIndex) % 5) * 0.00022);
+              const radians = (angle * Math.PI) / 180;
+              const lng = seed.coordinates[0] + (Math.cos(radians) * radius);
+              const lat = seed.coordinates[1] + (Math.sin(radians) * radius * 0.72);
+              incidents.push({
+                id: `crime-fallback-${monthKey}-${seedIndex}-${categoryIndex}-${step}`,
+                category,
+                month: monthKey,
+                street: seed.street,
+                area: seed.area,
+                coordinates: [Number(lng.toFixed(6)), Number(lat.toFixed(6))]
+              });
+            }
+          });
+        });
+        data[monthKey] = incidents;
+      });
+      return data;
+    }
+
+    function cloneCrimeIncidents(incidents) {
+      return incidents.map((incident) => ({
+        ...incident,
+        coordinates: Array.isArray(incident.coordinates) ? [...incident.coordinates] : incident.coordinates
+      }));
+    }
+
+    function normaliseCrimeIncidents(items, monthKey) {
+      if (!Array.isArray(items)) return [];
+      return items.map((item, index) => {
+        const lng = Array.isArray(item.coordinates)
+          ? Number(item.coordinates[0])
+          : Number(item.location?.longitude ?? item.location?.street?.location?.longitude ?? item.longitude);
+        const lat = Array.isArray(item.coordinates)
+          ? Number(item.coordinates[1])
+          : Number(item.location?.latitude ?? item.location?.street?.location?.latitude ?? item.latitude);
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+          return null;
+        }
+        const street = item.street || item.location?.street?.name || item.area || 'Location unavailable';
+        return {
+          id: item.id || `${monthKey}-${index}`,
+          category: item.category || 'other-crime',
+          month: item.month || monthKey,
+          street,
+          area: item.area || street,
+          coordinates: [lng, lat],
+          raw: item
+        };
+      }).filter(Boolean);
+    }
+
+    function getCrimeFallbackMonth(monthKey) {
+      if (CRIME_FALLBACK_DATA[monthKey]) {
+        return cloneCrimeIncidents(CRIME_FALLBACK_DATA[monthKey]);
+      }
+      const fallbackKey = CRIME_MONTH_OPTIONS[0];
+      return cloneCrimeIncidents(CRIME_FALLBACK_DATA[fallbackKey] || []);
+    }
+
+    async function resolveCrimeLayerData(monthKey) {
+      const cacheKey = `crime_${monthKey}`;
+      const url = `https://data.police.uk/api/crimes-street/all-crime?lat=${CRIME_CONFIG.fetchLat}&lng=${CRIME_CONFIG.fetchLng}&date=${monthKey}`;
+      try {
+        const { data, source } = await cachedFetch(url, cacheKey, CRIME_CONFIG.cacheTtlMs, 12000);
+        const incidents = normaliseCrimeIncidents(data, monthKey);
+        if (!incidents.length) {
+          throw new Error('No incidents returned for the selected month.');
+        }
+        return {
+          incidents,
+          source,
+          sourceLabel: source === 'cache'
+            ? 'data.police.uk · cached Merseyside street crimes'
+            : 'data.police.uk · Merseyside street crimes'
+        };
+      } catch (error) {
+        const fallbackIncidents = getCrimeFallbackMonth(monthKey);
+        if (!fallbackIncidents.length) {
+          throw error;
+        }
+        const fallbackTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date());
+        appState.cacheMeta[cacheKey] = `Embedded fallback · ${fallbackTime}`;
+        return {
+          incidents: fallbackIncidents,
+          source: 'fallback',
+          sourceLabel: 'Embedded fallback · Liverpool sample crime snapshot'
+        };
+      }
+    }
+
+    function buildCrimeSelection() {
+      if (!crimeState.summary) {
+        return {
+          type: 'crime-layer',
+          label: 'Crime heatmap',
+          description: 'Crime layer is active.'
+        };
+      }
+      const hotspot = crimeState.summary.hotspot
+        ? `${crimeState.summary.hotspot.street} (${crimeState.summary.hotspot.count} incidents)`
+        : 'No hotspot available';
+      return {
+        type: 'crime-layer',
+        label: `Crime · ${formatCrimeMonth(crimeState.selectedMonth)}`,
+        description: `${crimeState.summary.total.toLocaleString()} incidents across ${crimeState.selectedCategories.length}/${crimeState.categoryOptions.length || 0} categories. Highest density: ${hotspot}.`
+      };
+    }
+
+    function computeCrimeSummary(incidents) {
+      const total = incidents.length;
+      const byCategory = {};
+      const byStreet = {};
+      incidents.forEach((incident) => {
+        byCategory[incident.category] = (byCategory[incident.category] || 0) + 1;
+        byStreet[incident.street] = (byStreet[incident.street] || 0) + 1;
+      });
+      const categoryCounts = Object.entries(byCategory)
+        .map(([category, count]) => ({
+          category,
+          label: humanizeCrimeCategory(category),
+          count,
+          share: total ? count / total : 0
+        }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+      const hotspotEntry = Object.entries(byStreet).sort((a, b) => b[1] - a[1])[0];
+      return {
+        total,
+        categoryCounts,
+        topCategories: categoryCounts.slice(0, 3),
+        hotspot: hotspotEntry ? { street: hotspotEntry[0], count: hotspotEntry[1] } : null
+      };
+    }
+
+    function applyCrimeFilters() {
+      const allowed = new Set(crimeState.selectedCategories);
+      crimeState.filteredIncidents = crimeState.incidents.filter((incident) => allowed.has(incident.category));
+      crimeState.summary = computeCrimeSummary(crimeState.filteredIncidents);
+      if (appState.activeLayers.crime) {
+        appState.selection = buildCrimeSelection();
+      }
+    }
+
+    function syncCrimeUi(reason) {
+      if (appState.activeLayers.crime) {
+        appState.panel.activeDetail = 'crime';
+      }
+      renderLayerButtons();
+      renderLayerSummary();
+      renderLegend();
+      renderPanel();
+      updateDeckOverlay();
+      if (reason) {
+        updateLastUpdated(reason);
+      }
+    }
+
+    async function loadCrimeLayer(options = {}) {
+      const targetMonth = options.month || crimeState.selectedMonth || crimeState.availableMonths[0];
+      appState.loadingLayers.crime = true;
+      renderLayerButtons();
+      updateLastUpdated(`Crime: loading ${formatCrimeMonth(targetMonth)}...`);
+      try {
+        const payload = await resolveCrimeLayerData(targetMonth);
+        if (!appState.activeLayers.crime) {
+          return;
+        }
+        crimeState.selectedMonth = targetMonth;
+        crimeState.incidents = payload.incidents;
+        crimeState.source = payload.source;
+        crimeState.sourceLabel = payload.sourceLabel;
+        crimeState.categoryOptions = Array.from(new Set(crimeState.incidents.map((incident) => incident.category)))
+          .sort((a, b) => humanizeCrimeCategory(a).localeCompare(humanizeCrimeCategory(b)));
+        const retainedCategories = crimeState.selectedCategories.filter((category) => crimeState.categoryOptions.includes(category));
+        crimeState.selectedCategories = retainedCategories.length ? retainedCategories : [...crimeState.categoryOptions];
+        applyCrimeFilters();
+        appState.layerErrors.crime = null;
+        clearBanner();
+        syncCrimeUi(`Crime heatmap active · ${formatCrimeMonth(targetMonth)} · ${payload.source === 'fallback' ? 'fallback data' : payload.source}`);
+      } catch (error) {
+        crimeState.incidents = [];
+        crimeState.filteredIncidents = [];
+        crimeState.categoryOptions = [];
+        crimeState.selectedCategories = [];
+        crimeState.summary = null;
+        appState.layerErrors.crime = { message: error.message, error };
+        appState.activeLayers.crime = false;
+        setBanner({ title: 'Crime layer unavailable', message: error.message || 'Crime data could not be loaded.' });
+        renderLegend();
+        updateDeckOverlay();
+        renderLayerSummary();
+        renderPanel();
+      } finally {
+        appState.loadingLayers.crime = false;
+        renderLayerButtons();
+      }
+    }
+
+    async function setCrimeMonth(monthKey) {
+      if (!monthKey || monthKey === crimeState.selectedMonth && crimeState.incidents.length && !appState.loadingLayers.crime) {
+        return;
+      }
+      crimeState.selectedMonth = monthKey;
+      await loadCrimeLayer({ month: monthKey });
+    }
+
+    function toggleCrimeCategory(category, checked) {
+      if (!crimeState.categoryOptions.includes(category)) {
+        return;
+      }
+      const next = new Set(crimeState.selectedCategories);
+      if (checked) {
+        next.add(category);
+      } else {
+        next.delete(category);
+      }
+      crimeState.selectedCategories = crimeState.categoryOptions.filter((option) => next.has(option));
+      applyCrimeFilters();
+      syncCrimeUi(`Crime filters updated · ${crimeState.selectedCategories.length} ${crimeState.selectedCategories.length === 1 ? 'category' : 'categories'} active`);
+    }
+
+    function hideCrimeLayer() {
+      removeLayerPopups('crime');
+      if (appState.selection?.type === 'crime-layer') {
+        appState.selection = null;
+      }
+      updateDeckOverlay();
+    }
+
+    function renderCrimeControls() {
+      const options = crimeState.availableMonths.length ? crimeState.availableMonths : CRIME_MONTH_OPTIONS;
+      return `
+        <div class="crime-control-grid">
+          <div class="crime-control-row">
+            <label for="crime-month-select">Month</label>
+            <select id="crime-month-select" data-crime-month ${appState.loadingLayers.crime ? 'disabled' : ''}>
+              ${options.map((monthKey) => `
+                <option value="${monthKey}" ${monthKey === crimeState.selectedMonth ? 'selected' : ''}>${escapeHtml(formatCrimeMonth(monthKey))}</option>
+              `).join('')}
+            </select>
+          </div>
+          <div class="crime-control-row">
+            <span class="crime-filters-label">Category filters</span>
+            <div class="crime-filter-grid">
+              ${crimeState.categoryOptions.map((category) => `
+                <label class="crime-checkbox">
+                  <input type="checkbox" value="${category}" data-crime-category ${crimeState.selectedCategories.includes(category) ? 'checked' : ''} ${appState.loadingLayers.crime ? 'disabled' : ''} />
+                  <span>${escapeHtml(humanizeCrimeCategory(category))}</span>
+                </label>
+              `).join('') || '<div class="crime-checkbox" style="grid-column:1 / -1; cursor:default;">No categories available yet.</div>'}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCrimeCategoryBars(limit = 3) {
+      if (!crimeState.summary?.topCategories?.length) {
+        return '<div class="info-card"><h3>No incidents in the current filter</h3><p>Try enabling more categories to rebuild the hotspot view.</p></div>';
+      }
+      const total = Math.max(crimeState.summary.total, 1);
+      return `
+        <div class="crime-bar-list">
+          ${crimeState.summary.topCategories.slice(0, limit).map((entry) => `
+            <div class="crime-bar">
+              <div class="crime-bar-head">
+                <strong>${escapeHtml(entry.label)}</strong>
+                <span>${entry.count.toLocaleString()} · ${(entry.share * 100).toFixed(0)}%</span>
+              </div>
+              <div class="crime-bar-track">
+                <span class="crime-bar-fill" style="width:${((entry.count / total) * 100).toFixed(1)}%"></span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderCrimeOverviewPanel() {
+      if (appState.loadingLayers.crime && !crimeState.incidents.length) {
+        return '<div class="info-card"><h3>Crime layer loading</h3><p>Resolving the latest Liverpool street crime snapshot.</p></div>';
+      }
+      if (!crimeState.summary) {
+        return '<div class="info-card"><h3>Crime layer ready</h3><p>Enable the layer to see the monthly hotspot summary.</p></div>';
+      }
+      const hotspotText = crimeState.summary.hotspot
+        ? `${crimeState.summary.hotspot.street} · ${crimeState.summary.hotspot.count.toLocaleString()} incidents`
+        : 'No hotspot available for the selected filters.';
+      return `
+        <div class="stack">
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">Incidents</span>
+              <span class="metric-value">${crimeState.summary.total.toLocaleString()}</span>
+              <span class="metric-note">Street-level incidents for ${escapeHtml(formatCrimeMonth(crimeState.selectedMonth))} after applying the active category filters.</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Filters on</span>
+              <span class="metric-value">${crimeState.selectedCategories.length}/${crimeState.categoryOptions.length || 0}</span>
+              <span class="metric-note">The deck.gl heatmap updates instantly as categories are toggled on and off.</span>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <h3>Month + category controls</h3>
+            <p>Switch the month or narrow the category mix without leaving the panel.</p>
+            ${renderCrimeControls()}
+          </div>
+
+          <div class="info-card">
+            <h3>Top categories</h3>
+            <p>These are the highest-volume categories in the current hotspot view.</p>
+            ${renderCrimeCategoryBars()}
+          </div>
+
+          <div class="info-card crime-hotspot">
+            <h3>Hotspot callout</h3>
+            <p><strong>Highest density:</strong> ${escapeHtml(hotspotText)}</p>
+            <p style="margin-top:10px;">Use this as the operational shorthand for where the current crime pulse is strongest before the Business Insight Engine translates it into an overall safety score.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCrimeDataPanel() {
+      if (appState.loadingLayers.crime && !crimeState.incidents.length) {
+        return '<div class="info-card"><h3>Crime layer loading</h3><p>Resolving the latest Liverpool street crime snapshot.</p></div>';
+      }
+      if (!crimeState.summary) {
+        return '<div class="info-card"><h3>No crime data</h3><p>No incidents are available for the current selection.</p></div>';
+      }
+      const cacheKey = `crime_${crimeState.selectedMonth}`;
+      const rows = crimeState.summary.categoryCounts.map((entry) => `
+        <tr>
+          <td><strong>${escapeHtml(entry.label)}</strong></td>
+          <td>${entry.count.toLocaleString()}</td>
+          <td>${(entry.share * 100).toFixed(1)}%</td>
+        </tr>
+      `).join('');
+      return `
+        <div class="stack">
+          <div class="info-card">
+            <h3>Controls</h3>
+            ${renderCrimeControls()}
+          </div>
+
+          <div class="info-card">
+            <h3>Provenance</h3>
+            <ul class="status-list">
+              <li><strong>Month</strong>${escapeHtml(formatCrimeMonth(crimeState.selectedMonth))}</li>
+              <li><strong>Layer source</strong>${escapeHtml(crimeState.sourceLabel || 'Unavailable')}</li>
+              <li><strong>Cache</strong>${escapeHtml(appState.cacheMeta[cacheKey] || 'No cache metadata')}</li>
+              <li><strong>Hotspot</strong>${escapeHtml(crimeState.summary.hotspot ? `${crimeState.summary.hotspot.street} (${crimeState.summary.hotspot.count.toLocaleString()})` : 'None')}</li>
+            </ul>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Incidents</th>
+                <th>Share</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+
+          <div class="info-card">
+            <h3>Filter impact</h3>
+            <p>${crimeState.summary.total.toLocaleString()} incidents remain from ${crimeState.incidents.length.toLocaleString()} fetched records after applying ${crimeState.selectedCategories.length} category filter${crimeState.selectedCategories.length === 1 ? '' : 's'}.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function getCrimeButtonState() {
+      if (appState.layerErrors.crime) {
+        return {
+          label: 'Crime (unavailable)',
+          meta: appState.layerErrors.crime.message
+        };
+      }
+      if (crimeState.summary) {
+        return {
+          label: `Crime (${crimeState.summary.total.toLocaleString()})`,
+          meta: `${formatCrimeMonth(crimeState.selectedMonth)} · ${crimeState.selectedCategories.length}/${crimeState.categoryOptions.length || 0} categories · ${crimeState.source === 'fallback' ? 'fallback' : 'live/cache'}`
+        };
+      }
+      return {
+        label: LAYER_DEFINITIONS.crime.label,
+        meta: LAYER_DEFINITIONS.crime.meta
+      };
+    }
+
+    function getCrimeDeckLayers() {
+      if (!appState.activeLayers.crime || !crimeState.filteredIncidents.length || !window.deck?.HeatmapLayer) {
+        return [];
+      }
+      return [
+        new deck.HeatmapLayer({
+          id: CRIME_CONFIG.heatmapId,
+          data: crimeState.filteredIncidents,
+          getPosition: (incident) => incident.coordinates,
+          getWeight: () => 1,
+          intensity: 1,
+          radiusPixels: 40,
+          threshold: 0.05,
+          colorRange: [
+            [59, 130, 246, 0],
+            [59, 130, 246, 200],
+            [255, 215, 0, 220],
+            [255, 140, 0, 235],
+            [255, 59, 59, 255]
+          ],
+          aggregation: 'SUM',
+          parameters: { depthTest: false }
+        })
+      ];
+    }
 
     // ===== AIR QUALITY LAYER (P1) =====
     const AIR_CONFIG = {
@@ -2920,28 +3599,19 @@
     });
 
     LayerRegistry.register('crime', {
-      load() {
-        appState.loadingLayers.crime = true;
-        renderLayerButtons();
-        updateLastUpdated('Crime: pending data implementation');
-        setTimeout(() => {
-          appState.loadingLayers.crime = false;
-          renderLayerButtons();
-          updateLastUpdated('Crime layer armed (data pending)');
-        }, 600);
-      },
+      load: loadCrimeLayer,
       render() {},
-      hide() {
-        removeLayerPopups('crime');
-        updateDeckOverlay();
-      },
+      hide: hideCrimeLayer,
       destroyPanelArtifacts() { destroyLayerCharts('crime'); },
       getLegendItems() { return LAYER_DEFINITIONS.crime.legends; },
+      getButtonState: getCrimeButtonState,
       getPanelContent(tab) {
-        if (appState.panel.activeDetail !== 'crime') return null;
-        if (tab === 'about') return null;
-        return `<div class="stack"><div class="info-card"><h3>Crime Heatmap</h3><p>${LAYER_DEFINITIONS.crime.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
-      }
+        if (appState.panel.activeDetail !== 'crime' || !appState.activeLayers.crime) return null;
+        if (tab === 'overview') return renderCrimeOverviewPanel();
+        if (tab === 'data') return renderCrimeDataPanel();
+        return null;
+      },
+      getDeckLayers: getCrimeDeckLayers
     });
 
     LayerRegistry.register('air', {
