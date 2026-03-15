@@ -1,0 +1,1962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liverpool Intel</title>
+  <meta name="description" content="Liverpool Intel — a dark single-file GIS dashboard for Liverpool business intelligence." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0c0f;
+      --surface: #12151a;
+      --surface-2: #1a1f28;
+      --surface-3: rgba(26, 31, 40, 0.82);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text: #e8eaf0;
+      --text-muted: #8892a4;
+      --text-soft: #adb7c8;
+      --accent-red: #ff3b3b;
+      --accent-orange: #ff8c00;
+      --accent-yellow: #ffd700;
+      --accent-green: #22c55e;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-purple: #a855f7;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+      --topbar-height: 80px;
+      --footer-height: 38px;
+      --panel-width: 380px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --transition: 180ms ease;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      color: inherit;
+      background: none;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    }
+
+    .app-shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(255, 59, 59, 0.08), transparent 22%),
+        var(--bg);
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+    }
+
+    .topbar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 30;
+      min-height: var(--topbar-height);
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(280px, 420px) minmax(240px, 1fr);
+      gap: 14px;
+      align-items: center;
+      padding: 14px 18px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(18, 21, 26, 0.9), rgba(10, 12, 15, 0.8));
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .brand-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-title {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .brand-accent {
+      color: var(--accent-red);
+    }
+
+    .brand-subtitle {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      color: var(--text-soft);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .live-dot {
+      position: relative;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--accent-red);
+      box-shadow: 0 0 0 8px rgba(255, 59, 59, 0.15);
+      animation: pulse 1.8s infinite;
+    }
+
+    .search-form {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      min-width: 0;
+    }
+
+    .search-icon {
+      font-size: 1rem;
+      color: var(--text-muted);
+      padding-left: 6px;
+    }
+
+    .search-form input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      color: var(--text);
+      background: transparent;
+      padding: 10px 4px;
+    }
+
+    .search-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 92px;
+      padding: 11px 14px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      color: #04131f;
+      font-weight: 700;
+      transition: transform var(--transition), box-shadow var(--transition), filter var(--transition);
+      box-shadow: 0 14px 30px rgba(6, 182, 212, 0.18);
+    }
+
+    .search-button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
+
+    .search-button:disabled {
+      cursor: progress;
+      opacity: 0.7;
+      transform: none;
+      filter: none;
+    }
+
+    .status-cluster {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .status-card {
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      min-width: 0;
+    }
+
+    .status-card .label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--text-muted);
+      font-size: 0.74rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .status-card .value {
+      display: block;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .glass-card {
+      position: absolute;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface-3);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .layer-panel {
+      top: calc(16px + var(--topbar-height) + 14px);
+      left: 16px;
+      z-index: 24;
+      width: min(320px, calc(100vw - 32px));
+      padding: 18px;
+    }
+
+    .panel-label {
+      margin: 0 0 6px;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .panel-title {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .panel-copy {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .layer-grid {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .layer-button {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      transition: transform var(--transition), border-color var(--transition), background var(--transition), box-shadow var(--transition);
+      text-align: left;
+    }
+
+    .layer-button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .layer-button.active {
+      border-color: rgba(255, 255, 255, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 18px 35px rgba(0, 0, 0, 0.18);
+    }
+
+    .layer-button.error {
+      border-color: rgba(255, 140, 0, 0.35);
+      background: rgba(255, 140, 0, 0.08);
+    }
+
+    .layer-button.loading {
+      cursor: progress;
+    }
+
+    .layer-button .layer-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.04);
+    }
+
+    .layer-button .layer-label {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .layer-button .layer-name {
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .layer-button .layer-meta {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 2px solid rgba(255, 255, 255, 0.16);
+      border-top-color: var(--text);
+      animation: spin 0.8s linear infinite;
+      opacity: 0;
+    }
+
+    .layer-button.loading .spinner {
+      opacity: 1;
+    }
+
+    .layer-summary {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .summary-pill {
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+      font-size: 0.76rem;
+      font-weight: 600;
+    }
+
+    .legend {
+      position: absolute;
+      left: 16px;
+      bottom: calc(var(--footer-height) + 16px);
+      z-index: 24;
+      width: min(360px, calc(100vw - 32px));
+      padding: 16px 18px;
+    }
+
+    .legend-items {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .legend-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: center;
+      color: var(--text-soft);
+      font-size: 0.84rem;
+    }
+
+    .legend-ramp,
+    .legend-chip {
+      width: 44px;
+      height: 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      flex-shrink: 0;
+    }
+
+    .legend-empty {
+      margin-top: 14px;
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .panel-toggle {
+      position: absolute;
+      top: calc(16px + var(--topbar-height) + 18px);
+      right: calc(16px + var(--panel-width) + 18px);
+      z-index: 26;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(18, 21, 26, 0.92);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      font-weight: 700;
+      transition: transform var(--transition), right var(--transition), background var(--transition);
+    }
+
+    .panel-toggle:hover {
+      transform: translateY(-1px);
+      background: rgba(24, 29, 36, 0.96);
+    }
+
+    .panel-toggle.closed {
+      right: 16px;
+    }
+
+    .side-panel {
+      top: calc(16px + var(--topbar-height) + 14px);
+      right: 16px;
+      bottom: calc(var(--footer-height) + 16px);
+      z-index: 25;
+      width: min(var(--panel-width), calc(100vw - 32px));
+      display: flex;
+      flex-direction: column;
+      transition: transform 220ms ease, opacity 220ms ease;
+    }
+
+    .side-panel.closed {
+      transform: translateX(calc(100% + 22px));
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .panel-handle {
+      display: none;
+      width: 46px;
+      height: 5px;
+      border-radius: 999px;
+      margin: 10px auto 0;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .side-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 18px 18px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .side-panel-header h2 {
+      margin: 0;
+      font-size: 1.08rem;
+    }
+
+    .side-panel-header p {
+      margin: 6px 0 0;
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .panel-close {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+
+    .panel-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 14px 18px 10px;
+    }
+
+    .tab-button {
+      padding: 10px 12px;
+      border-radius: 14px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      font-weight: 700;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
+    }
+
+    .tab-button.active {
+      color: var(--text);
+      background: rgba(59, 130, 246, 0.12);
+      border-color: rgba(59, 130, 246, 0.28);
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow: auto;
+      padding: 0 18px 18px;
+    }
+
+    .panel-body::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    .panel-body::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .info-card {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .info-card h3,
+    .info-card h4 {
+      margin: 0 0 10px;
+      font-size: 0.96rem;
+    }
+
+    .info-card p {
+      margin: 0;
+      color: var(--text-soft);
+      font-size: 0.88rem;
+      line-height: 1.6;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric-card {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .metric-label {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .metric-value {
+      display: block;
+      font-size: 1.18rem;
+      font-weight: 800;
+    }
+
+    .metric-note {
+      display: block;
+      margin-top: 6px;
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    .detail-list,
+    .source-list,
+    .status-list,
+    .score-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .detail-list li,
+    .source-list li,
+    .status-list li,
+    .score-list li {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--text-soft);
+      font-size: 0.84rem;
+      line-height: 1.55;
+    }
+
+    .detail-list strong,
+    .source-list strong,
+    .status-list strong,
+    .score-list strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .data-table th,
+    .data-table td {
+      padding: 12px 14px;
+      text-align: left;
+      font-size: 0.82rem;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .data-table th {
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-soft);
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .status-badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.9;
+    }
+
+    .status-badge.active {
+      color: var(--accent-green);
+    }
+
+    .status-badge.idle {
+      color: var(--text-muted);
+    }
+
+    .status-badge.loading {
+      color: var(--accent-yellow);
+    }
+
+    .status-badge.error {
+      color: var(--accent-orange);
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .maplibregl-popup {
+      max-width: 280px;
+    }
+
+    .maplibregl-popup-content {
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: rgba(15, 18, 24, 0.95);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: var(--shadow);
+    }
+
+    .maplibregl-popup-close-button {
+      color: var(--text-muted);
+      font-size: 1.1rem;
+      padding: 8px 10px;
+    }
+
+    .map-popup h3 {
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+    }
+
+    .map-popup p {
+      margin: 0;
+      color: var(--text-soft);
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    .error-banner {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 40;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      max-width: min(760px, calc(100vw - 32px));
+      padding: 12px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 59, 59, 0.24);
+      background: rgba(76, 12, 18, 0.92);
+      box-shadow: 0 18px 40px rgba(72, 12, 12, 0.45);
+      backdrop-filter: blur(18px);
+      color: #ffdada;
+    }
+
+    .error-banner.visible {
+      display: flex;
+    }
+
+    .error-banner .error-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      font-size: 0.95rem;
+      font-weight: 800;
+    }
+
+    .footer {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 12px;
+      z-index: 24;
+      min-height: var(--footer-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(10, 12, 15, 0.82);
+      backdrop-filter: blur(18px);
+      color: var(--text-muted);
+      font-size: 0.76rem;
+      box-shadow: var(--shadow);
+    }
+
+    .footer strong {
+      color: var(--text-soft);
+      font-weight: 700;
+    }
+
+    .footer a {
+      color: var(--text-soft);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: var(--text);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.92);
+        box-shadow: 0 0 0 0 rgba(255, 59, 59, 0.38);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(255, 59, 59, 0);
+      }
+      100% {
+        transform: scale(0.92);
+        box-shadow: 0 0 0 0 rgba(255, 59, 59, 0);
+      }
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (max-width: 1220px) {
+      .topbar {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .status-cluster {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .layer-panel {
+        top: calc(16px + var(--topbar-height) + 104px);
+      }
+
+      .side-panel {
+        top: calc(16px + var(--topbar-height) + 104px);
+      }
+
+      .panel-toggle {
+        top: calc(16px + var(--topbar-height) + 108px);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .layer-panel {
+        width: min(280px, calc(100vw - 32px));
+      }
+
+      .panel-toggle {
+        right: 16px;
+        top: auto;
+        bottom: calc(var(--footer-height) + 24px);
+      }
+
+      .panel-toggle.closed {
+        right: 16px;
+      }
+
+      .side-panel {
+        top: auto;
+        left: 16px;
+        right: 16px;
+        bottom: calc(var(--footer-height) + 16px);
+        width: auto;
+        max-height: min(72vh, 620px);
+      }
+
+      .side-panel.closed {
+        transform: translateY(calc(100% + 22px));
+      }
+
+      .panel-handle {
+        display: block;
+      }
+
+      .legend {
+        bottom: calc(var(--footer-height) + 86px);
+      }
+    }
+
+    @media (max-width: 767px) {
+      :root {
+        --topbar-height: 144px;
+      }
+
+      .topbar {
+        padding: 14px;
+        border-radius: 22px;
+      }
+
+      .brand-row {
+        flex-wrap: wrap;
+      }
+
+      .search-form {
+        flex-wrap: wrap;
+      }
+
+      .search-icon {
+        display: none;
+      }
+
+      .search-form input {
+        width: 100%;
+      }
+
+      .search-button {
+        width: 100%;
+      }
+
+      .status-cluster,
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .layer-panel {
+        top: calc(16px + var(--topbar-height) + 24px);
+        width: calc(100vw - 32px);
+      }
+
+      .legend {
+        width: calc(100vw - 32px);
+      }
+
+      .footer {
+        align-items: flex-start;
+        flex-direction: column;
+        border-radius: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div id="map" aria-label="Liverpool map"></div>
+
+    <div class="error-banner" id="error-banner" role="alert" aria-live="assertive">
+      <div class="error-icon">!</div>
+      <div>
+        <strong id="error-title">Critical data issue</strong>
+        <div id="error-message">A source failed to load.</div>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand-stack">
+        <div class="brand-row">
+          <h1 class="brand-title">Liverpool <span class="brand-accent">Intel</span></h1>
+          <div class="live-pill">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span id="live-pill-text">Shell online</span>
+          </div>
+        </div>
+        <p class="brand-subtitle">Dark GIS command deck for Liverpool open data, commercial context, and location intelligence.</p>
+      </div>
+
+      <form id="search-form" class="search-form" autocomplete="off">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <label class="sr-only" for="postcode-input">Search Liverpool postcode</label>
+        <input id="postcode-input" name="postcode" type="text" value="L1 8JQ" />
+        <button class="search-button" id="search-button" type="submit">Search</button>
+      </form>
+
+      <div class="status-cluster">
+        <div class="status-card">
+          <span class="label">Last updated</span>
+          <span class="value" id="last-updated">Booting…</span>
+        </div>
+        <div class="status-card">
+          <span class="label">Viewport</span>
+          <span class="value mono" id="viewport-readout">53.4084, -2.9916 · z12.0</span>
+        </div>
+      </div>
+    </header>
+
+    <aside class="glass-card layer-panel" aria-label="Layer controls">
+      <p class="panel-label">Layers</p>
+      <h2 class="panel-title">Toggle the intelligence stack</h2>
+      <p class="panel-copy">The shell already handles button state, legend orchestration, and panel routing. Layer data and analysis will slot into this same control surface.</p>
+      <div class="layer-grid" id="layer-buttons"></div>
+      <div class="layer-summary" id="layer-summary-pills"></div>
+    </aside>
+
+    <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="side-panel">
+      <span id="panel-toggle-icon">⟶</span>
+      <span id="panel-toggle-label">Hide panel</span>
+    </button>
+
+    <aside id="side-panel" class="glass-card side-panel" aria-label="Intel panel">
+      <div class="panel-handle" aria-hidden="true"></div>
+      <div class="side-panel-header">
+        <div>
+          <p class="panel-label">Panel</p>
+          <h2>Area context</h2>
+          <p id="panel-description">Overview, raw data status, and methodology live here.</p>
+        </div>
+        <button id="panel-close" class="panel-close" type="button" aria-label="Close panel">×</button>
+      </div>
+      <div class="panel-tabs" role="tablist" aria-label="Panel tabs">
+        <button class="tab-button active" type="button" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+        <button class="tab-button" type="button" data-tab="data" role="tab" aria-selected="false">Data</button>
+        <button class="tab-button" type="button" data-tab="about" role="tab" aria-selected="false">About</button>
+      </div>
+      <div id="panel-body" class="panel-body"></div>
+    </aside>
+
+    <section class="glass-card legend" aria-label="Legend">
+      <p class="panel-label">Legend</p>
+      <h2 class="panel-title">Visible symbology</h2>
+      <p class="panel-copy" id="legend-intro">Activate a layer to inspect the exact colour ramp or symbol set it will bring onto the map.</p>
+      <div id="legend-content"></div>
+    </section>
+
+    <footer class="footer">
+      <div><strong>Sources:</strong> CartoDB dark_all, data.police.uk, DEFRA AURN, ONS IMD, Overpass, Liverpool Open Data, Environment Agency.</div>
+      <div><strong>Version:</strong> <span id="app-version">v0.1.0-shell</span></div>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/deck.gl@9.1.0/dist.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script>
+    const APP_VERSION = '0.1.0-shell';
+    const LIVERPOOL_CENTER = [-2.9916, 53.4084];
+    const LIVERPOOL_BOUNDS = {
+      west: -3.08,
+      south: 53.33,
+      east: -2.84,
+      north: 53.47
+    };
+
+    const LAYER_DEFINITIONS = {
+      crime: {
+        label: 'Crime Heatmap',
+        short: 'Crime',
+        color: '#ff3b3b',
+        meta: 'deck.gl heatmap · cached by month',
+        detail: 'Three-month rolling crime density and category drill-down.',
+        legends: [
+          { type: 'gradient', label: 'Low → high density', colors: 'linear-gradient(90deg, #3b82f6 0%, #ffd700 50%, #ff3b3b 100%)' }
+        ]
+      },
+      air: {
+        label: 'Air Quality',
+        short: 'Air',
+        color: '#ffd700',
+        meta: 'DAQI markers · Liverpool monitoring stations',
+        detail: 'Sensor markers, advisory copy, and DAQI health context.',
+        legends: [
+          { type: 'chip', label: 'Low (DAQI 1–3)', color: '#22c55e' },
+          { type: 'chip', label: 'Moderate (4–6)', color: '#ffd700' },
+          { type: 'chip', label: 'High (7–9)', color: '#ff8c00' },
+          { type: 'chip', label: 'Very high (10)', color: '#ff3b3b' }
+        ]
+      },
+      business: {
+        label: 'Business Density',
+        short: 'Business',
+        color: '#22c55e',
+        meta: 'deck.gl hexagons · Overpass commercial POIs',
+        detail: 'Commercial hotspots and 3D extrusion for footfall proxies.',
+        legends: [
+          { type: 'gradient', label: 'Low → high business density', colors: 'linear-gradient(90deg, #3b82f6 0%, #06b6d4 55%, #ffffff 100%)' }
+        ]
+      },
+      deprivation: {
+        label: 'Deprivation Index',
+        short: 'Deprivation',
+        color: '#3b82f6',
+        meta: 'MapLibre fill layer · IMD 2019 choropleth',
+        detail: 'Liverpool LSOA deprivation context using five stepped classes.',
+        legends: [
+          { type: 'chip', label: 'Decile 1–2', color: '#dc2626' },
+          { type: 'chip', label: 'Decile 3–4', color: '#f97316' },
+          { type: 'chip', label: 'Decile 5–6', color: '#eab308' },
+          { type: 'chip', label: 'Decile 7–8', color: '#84cc16' },
+          { type: 'chip', label: 'Decile 9–10', color: '#22c55e' }
+        ]
+      },
+      transport: {
+        label: 'Transport Nodes',
+        short: 'Transport',
+        color: '#a855f7',
+        meta: 'Static stations + interchanges · click popups',
+        detail: 'Rail and bus access points for connectivity scoring.',
+        legends: [
+          { type: 'chip', label: 'Rail station', color: '#06b6d4' },
+          { type: 'chip', label: 'Bus interchange', color: '#3b82f6' }
+        ]
+      },
+      planning: {
+        label: 'Planning Applications',
+        short: 'Planning',
+        color: '#f3f4f6',
+        meta: 'Recent planning applications · status filters',
+        detail: 'Pending, approved, refused, and withdrawn planning points.',
+        legends: [
+          { type: 'chip', label: 'Pending', color: '#ffd700' },
+          { type: 'chip', label: 'Approved', color: '#22c55e' },
+          { type: 'chip', label: 'Refused', color: '#ff3b3b' },
+          { type: 'chip', label: 'Withdrawn', color: '#6b7280' }
+        ]
+      },
+      flood: {
+        label: 'Flood Risk',
+        short: 'Flood',
+        color: '#06b6d4',
+        meta: 'Flood zones · Mersey frontage risk view',
+        detail: 'Flood Zone 2 and Flood Zone 3 overlays for resilience planning.',
+        legends: [
+          { type: 'chip', label: 'Flood Zone 2', color: 'rgba(59,130,246,0.55)' },
+          { type: 'chip', label: 'Flood Zone 3', color: 'rgba(255,59,59,0.68)' }
+        ]
+      }
+    };
+
+    const appState = {
+      map: null,
+      deckOverlay: null,
+      activeLayers: Object.fromEntries(Object.keys(LAYER_DEFINITIONS).map((key) => [key, false])),
+      loadingLayers: Object.fromEntries(Object.keys(LAYER_DEFINITIONS).map((key) => [key, false])),
+      layerErrors: Object.fromEntries(Object.keys(LAYER_DEFINITIONS).map((key) => [key, null])),
+      cacheMeta: {},
+      panel: {
+        tab: 'overview',
+        open: true,
+        activeDetail: 'system'
+      },
+      selection: null,
+      comparePins: [],
+      charts: {
+        overview: null
+      },
+      lastUpdated: null,
+      search: {
+        pending: false,
+        lastQuery: '',
+        result: null
+      },
+      systemError: null,
+      banner: null
+    };
+
+    const dom = {};
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    function init() {
+      cacheDom();
+      attachEvents();
+      renderLayerButtons();
+      renderLayerSummary();
+      renderPanel();
+      renderLegend();
+      renderFooterVersion();
+      updateViewportReadout({ lat: LIVERPOOL_CENTER[1], lng: LIVERPOOL_CENTER[0], zoom: 12 });
+      updateLastUpdated('Initialising shell');
+      initMap();
+    }
+
+    function cacheDom() {
+      dom.errorBanner = document.getElementById('error-banner');
+      dom.errorTitle = document.getElementById('error-title');
+      dom.errorMessage = document.getElementById('error-message');
+      dom.lastUpdated = document.getElementById('last-updated');
+      dom.viewportReadout = document.getElementById('viewport-readout');
+      dom.livePillText = document.getElementById('live-pill-text');
+      dom.layerButtons = document.getElementById('layer-buttons');
+      dom.layerSummary = document.getElementById('layer-summary-pills');
+      dom.legendContent = document.getElementById('legend-content');
+      dom.legendIntro = document.getElementById('legend-intro');
+      dom.sidePanel = document.getElementById('side-panel');
+      dom.panelBody = document.getElementById('panel-body');
+      dom.panelToggle = document.getElementById('panel-toggle');
+      dom.panelToggleLabel = document.getElementById('panel-toggle-label');
+      dom.panelToggleIcon = document.getElementById('panel-toggle-icon');
+      dom.panelDescription = document.getElementById('panel-description');
+      dom.searchForm = document.getElementById('search-form');
+      dom.searchButton = document.getElementById('search-button');
+      dom.postcodeInput = document.getElementById('postcode-input');
+      dom.panelClose = document.getElementById('panel-close');
+      dom.appVersion = document.getElementById('app-version');
+      dom.tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+    }
+
+    function attachEvents() {
+      dom.layerButtons.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-layer]');
+        if (!button) return;
+        toggleLayer(button.dataset.layer);
+      });
+
+      dom.tabButtons.forEach((button) => {
+        button.addEventListener('click', () => setPanelTab(button.dataset.tab));
+      });
+
+      dom.panelToggle.addEventListener('click', () => setPanelOpen(!appState.panel.open));
+      dom.panelClose.addEventListener('click', () => setPanelOpen(false));
+
+      dom.searchForm.addEventListener('submit', handleSearchSubmit);
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && appState.panel.open) {
+          setPanelOpen(false);
+        }
+      });
+    }
+
+    function initMap() {
+      if (!window.maplibregl) {
+        raiseSystemError('MapLibre failed to load from CDN. The shell cannot render the base map.');
+        return;
+      }
+
+      appState.map = new maplibregl.Map({
+        container: 'map',
+        center: LIVERPOOL_CENTER,
+        zoom: 12,
+        minZoom: 10,
+        maxZoom: 18,
+        attributionControl: false,
+        style: {
+          version: 8,
+          glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+          sources: {
+            'carto-dark': {
+              type: 'raster',
+              tiles: ['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+              tileSize: 256,
+              attribution: '© OpenStreetMap contributors © CARTO'
+            }
+          },
+          layers: [
+            {
+              id: 'carto-dark-base',
+              type: 'raster',
+              source: 'carto-dark'
+            }
+          ]
+        }
+      });
+
+      appState.map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+      appState.map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+
+      appState.map.on('load', () => {
+        if (window.deck && typeof window.deck.MapboxOverlay === 'function') {
+          appState.deckOverlay = new deck.MapboxOverlay({ interleaved: false, layers: [] });
+          appState.map.addControl(appState.deckOverlay);
+        } else {
+          setBanner({
+            title: 'Overlay library unavailable',
+            message: 'deck.gl did not expose MapboxOverlay. Base map is live, but overlay layers will wait until the library is available.'
+          });
+        }
+
+        updateLastUpdated('Base map ready');
+        dom.livePillText.textContent = 'Base map live';
+        renderPanel();
+      });
+
+      appState.map.on('move', () => {
+        const center = appState.map.getCenter();
+        updateViewportReadout({ lat: center.lat, lng: center.lng, zoom: appState.map.getZoom() });
+      });
+
+      appState.map.on('click', (event) => {
+        handleMapClick(event.lngLat);
+      });
+
+      appState.map.on('error', () => {
+        setBanner({
+          title: 'Map rendering issue',
+          message: 'A map resource failed to load. Tiles may look incomplete until the next retry.'
+        });
+      });
+    }
+
+    function renderFooterVersion() {
+      dom.appVersion.textContent = `v${APP_VERSION}`;
+    }
+
+    function renderLayerButtons() {
+      dom.layerButtons.innerHTML = Object.entries(LAYER_DEFINITIONS).map(([key, layer]) => {
+        const isActive = appState.activeLayers[key];
+        const isLoading = appState.loadingLayers[key];
+        const hasError = Boolean(appState.layerErrors[key]);
+        const label = hasError ? `${layer.short} unavailable` : layer.label;
+        const meta = hasError ? appState.layerErrors[key].message : layer.meta;
+
+        return `
+          <button
+            class="layer-button ${isActive ? 'active' : ''} ${isLoading ? 'loading' : ''} ${hasError ? 'error' : ''}"
+            type="button"
+            data-layer="${key}"
+            aria-pressed="${isActive}"
+          >
+            <span class="layer-dot" style="background:${layer.color}"></span>
+            <span class="layer-label">
+              <span class="layer-name">${label}</span>
+              <span class="layer-meta">${meta}</span>
+            </span>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function renderLayerSummary() {
+      const activeCount = Object.values(appState.activeLayers).filter(Boolean).length;
+      const selectedLabel = appState.selection ? getSelectionLabel(appState.selection) : 'No selection';
+      const searchStatus = appState.search.result ? `Search locked: ${appState.search.result.postcode}` : 'Search ready';
+
+      dom.layerSummary.innerHTML = [
+        `${activeCount} layer${activeCount === 1 ? '' : 's'} active`,
+        selectedLabel,
+        searchStatus
+      ].map((text) => `<span class="summary-pill">${escapeHtml(text)}</span>`).join('');
+    }
+
+    function renderLegend() {
+      const activeKeys = Object.keys(appState.activeLayers).filter((key) => appState.activeLayers[key]);
+      if (!activeKeys.length) {
+        dom.legendIntro.textContent = 'Activate a layer to inspect the exact colour ramp or symbol set it will bring onto the map.';
+        dom.legendContent.innerHTML = '<div class="legend-empty">The shell keeps the legend empty until a layer is visible, so the legend always reflects what is actually on screen.</div>';
+        return;
+      }
+
+      dom.legendIntro.textContent = `${activeKeys.length} layer${activeKeys.length === 1 ? '' : 's'} visible. Legend entries mirror the configured map symbology.`;
+      const items = activeKeys.flatMap((key) => LAYER_DEFINITIONS[key].legends.map((legend) => ({ layer: LAYER_DEFINITIONS[key].short, ...legend })));
+      dom.legendContent.innerHTML = `
+        <div class="legend-items">
+          ${items.map((item) => {
+            const swatch = item.type === 'gradient'
+              ? `<span class="legend-ramp" style="background:${item.colors}"></span>`
+              : `<span class="legend-chip" style="background:${item.color}"></span>`;
+            return `
+              <div class="legend-item">
+                ${swatch}
+                <div><strong>${escapeHtml(item.layer)}</strong> ${escapeHtml(item.label)}</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderPanel() {
+      updatePanelChrome();
+      destroyOverviewChart();
+
+      if (appState.panel.tab === 'overview') {
+        dom.panelBody.innerHTML = renderOverviewTab();
+        requestAnimationFrame(renderOverviewChart);
+        return;
+      }
+
+      if (appState.panel.tab === 'data') {
+        dom.panelBody.innerHTML = renderDataTab();
+        return;
+      }
+
+      dom.panelBody.innerHTML = renderAboutTab();
+    }
+
+    function renderOverviewTab() {
+      const activeKeys = Object.keys(appState.activeLayers).filter((key) => appState.activeLayers[key]);
+      const primaryLayer = activeKeys.length ? LAYER_DEFINITIONS[activeKeys[0]] : null;
+      const selectionMarkup = appState.selection
+        ? renderSelectionCard(appState.selection)
+        : `
+          <div class="info-card">
+            <h3>Map click routing is live</h3>
+            <p>Click anywhere on the map to capture a location context. The shell already stores the coordinate, measures distance from Liverpool core with Turf.js, and uses the same panel surface future layers will target.</p>
+          </div>
+        `;
+
+      const activeLayerMarkup = activeKeys.length
+        ? `
+          <ul class="detail-list">
+            ${activeKeys.map((key) => `
+              <li>
+                <strong>${escapeHtml(LAYER_DEFINITIONS[key].label)}</strong>
+                ${escapeHtml(LAYER_DEFINITIONS[key].detail)}
+              </li>
+            `).join('')}
+          </ul>
+        `
+        : `
+          <div class="info-card">
+            <h3>No layers active</h3>
+            <p>The shell is fully interactive even before data loads. Use the left control stack to stage visible symbology, inspect legend behavior, and route panel focus.</p>
+          </div>
+        `;
+
+      return `
+        <div class="stack">
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">Active layers</span>
+              <span class="metric-value">${activeKeys.length}</span>
+              <span class="metric-note">Seven layer slots are wired into the shell and can be toggled repeatedly without duplicate UI state.</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Panel focus</span>
+              <span class="metric-value">${escapeHtml(primaryLayer ? primaryLayer.short : 'System')}</span>
+              <span class="metric-note">${escapeHtml(primaryLayer ? primaryLayer.meta : 'No active layer selected. Map interactions drive the current context.')}</span>
+            </div>
+          </div>
+
+          ${selectionMarkup}
+
+          <div class="info-card">
+            <h3>Layer activity mix</h3>
+            <p>The chart below is intentionally simple: it proves Chart.js lifecycle handling in the single-file shell before the richer deprivation, air, and crime analytics land here.</p>
+            <canvas id="overview-chart" height="220" aria-label="Layer activity chart"></canvas>
+          </div>
+
+          <div class="info-card">
+            <h3>Visible intelligence stack</h3>
+            <p>The active list below reflects the same layer registry driving the buttons and legend.</p>
+            ${activeLayerMarkup}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDataTab() {
+      const rows = Object.entries(LAYER_DEFINITIONS).map(([key, layer]) => {
+        const statusClass = appState.layerErrors[key]
+          ? 'error'
+          : appState.loadingLayers[key]
+            ? 'loading'
+            : appState.activeLayers[key]
+              ? 'active'
+              : 'idle';
+        const statusLabel = appState.layerErrors[key]
+          ? 'Unavailable'
+          : appState.loadingLayers[key]
+            ? 'Loading'
+            : appState.activeLayers[key]
+              ? 'Active'
+              : 'Idle';
+        const message = appState.layerErrors[key]?.message || layer.meta;
+
+        return `
+          <tr>
+            <td><strong>${escapeHtml(layer.label)}</strong><br /><span style="color:var(--text-muted)">${escapeHtml(layer.detail)}</span></td>
+            <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+            <td>${escapeHtml(message)}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const cacheKeys = Object.keys(appState.cacheMeta);
+      const cacheMarkup = cacheKeys.length
+        ? `<ul class="status-list">${cacheKeys.map((key) => `<li><strong>${escapeHtml(key)}</strong>${escapeHtml(appState.cacheMeta[key])}</li>`).join('')}</ul>`
+        : '<div class="info-card"><h3>Cache metadata</h3><p>No data caches have been written yet. This shell reserves the state object and panel space for the sessionStorage layer contracts defined in the implementation plan.</p></div>';
+
+      return `
+        <div class="stack">
+          <div class="info-card">
+            <h3>Layer status</h3>
+            <p>This table is the app-wide readiness view. As real fetchers arrive, the same status model will drive spinners, unavailable labels, and top-banner failures without changing the UI shell.</p>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>Status</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+
+          ${cacheMarkup}
+
+          <div class="info-card">
+            <h3>Search + viewport telemetry</h3>
+            <ul class="status-list">
+              <li><strong>Search state</strong>${escapeHtml(appState.search.pending ? 'Resolving postcode…' : appState.search.result ? `${appState.search.result.postcode} → ${appState.search.result.admin}` : 'No postcode resolved in this session yet.')}</li>
+              <li><strong>Last updated label</strong>${escapeHtml(formatLastUpdated(appState.lastUpdated))}</li>
+              <li><strong>Selection routing</strong>${escapeHtml(appState.selection ? getSelectionLabel(appState.selection) : 'Awaiting a map click or postcode search.')}</li>
+            </ul>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAboutTab() {
+      return `
+        <div class="stack">
+          <div class="info-card">
+            <h3>What this shell already guarantees</h3>
+            <p>Single-file delivery, dark Gulf Watch visual language, responsive panel behavior, dynamic legend composition, postcode fly-to, map-click context capture, and chart cleanup are already in place. Data layers can now focus on their own fetch/render logic instead of rebuilding app chrome.</p>
+          </div>
+
+          <div class="info-card">
+            <h3>Composite score weights</h3>
+            <ul class="score-list">
+              <li><strong>Safety</strong>25% of overall intel score.</li>
+              <li><strong>Deprivation</strong>25% of overall intel score.</li>
+              <li><strong>Connectivity</strong>20% of overall intel score.</li>
+              <li><strong>Business density</strong>20% of overall intel score.</li>
+              <li><strong>Air quality</strong>10% of overall intel score.</li>
+            </ul>
+          </div>
+
+          <div class="info-card">
+            <h3>Data sources the shell is prepared for</h3>
+            <ul class="source-list">
+              <li><strong>Crime</strong>data.police.uk crime street API, cached by month for rolling hotspot views.</li>
+              <li><strong>Air quality</strong>DEFRA AURN readings with DAQI-style marker states and advisory copy.</li>
+              <li><strong>Deprivation</strong>ONS IMD 2019 Liverpool LSOAs with choropleth styling and distribution charts.</li>
+              <li><strong>Business + transport</strong>Overpass business POIs plus embedded Merseyrail and bus nodes for connectivity context.</li>
+              <li><strong>Planning + flood</strong>Liverpool planning feeds and Environment Agency flood zones with risk-aware symbology.</li>
+            </ul>
+          </div>
+
+          <div class="info-card">
+            <h3>Interaction model</h3>
+            <div class="tag-row">
+              <span class="tag">Feature click beats bare map click</span>
+              <span class="tag">Bare map click drives area intel</span>
+              <span class="tag">Legend only shows visible layers</span>
+              <span class="tag">Panel routes overview, raw data, and method</span>
+              <span class="tag">Mobile panel slides from bottom</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSelectionCard(selection) {
+      if (selection.type === 'search-result') {
+        const outside = selection.insideLiverpool ? '' : '<br />Outside Liverpool focus area — left in view so you can compare context against the core city baseline.';
+        return `
+          <div class="info-card">
+            <h3>Search result: ${escapeHtml(selection.postcode)}</h3>
+            <p>${escapeHtml(selection.admin)} · ${escapeHtml(selection.country)}<br />${escapeHtml(selection.formattedCoordinates)} · ${escapeHtml(selection.distanceFromCore)} from Liverpool core.${outside}</p>
+          </div>
+        `;
+      }
+
+      if (selection.type === 'map-click') {
+        return `
+          <div class="info-card">
+            <h3>Map click captured</h3>
+            <p>${escapeHtml(selection.formattedCoordinates)} · ${escapeHtml(selection.distanceFromCore)} from Liverpool core. This selection will become the input for the Business Insight Engine once the score inputs are wired.</p>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="info-card">
+          <h3>${escapeHtml(getSelectionLabel(selection))}</h3>
+          <p>${escapeHtml(selection.description || 'Current context is loaded and ready for layer detail content.')}</p>
+        </div>
+      `;
+    }
+
+    function renderOverviewChart() {
+      const canvas = document.getElementById('overview-chart');
+      if (!canvas || !window.Chart) {
+        return;
+      }
+
+      const activeCount = Object.values(appState.activeLayers).filter(Boolean).length;
+      const idleCount = Object.keys(appState.activeLayers).length - activeCount;
+      destroyOverviewChart();
+
+      appState.charts.overview = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: ['Active layers', 'Inactive layers'],
+          datasets: [{
+            data: [activeCount, idleCount],
+            backgroundColor: ['#3b82f6', 'rgba(136, 146, 164, 0.24)'],
+            borderColor: ['rgba(59,130,246,0.95)', 'rgba(255,255,255,0.08)'],
+            borderWidth: 1,
+            hoverOffset: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '72%',
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                color: '#e8eaf0',
+                usePointStyle: true,
+                boxWidth: 10,
+                boxHeight: 10,
+                padding: 18,
+                font: {
+                  family: 'Inter',
+                  weight: '600'
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(10,12,15,0.96)',
+              titleColor: '#e8eaf0',
+              bodyColor: '#c7d0de',
+              borderColor: 'rgba(255,255,255,0.08)',
+              borderWidth: 1
+            }
+          }
+        },
+        plugins: [{
+          id: 'centerText',
+          afterDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta.data.length) return;
+            const { ctx } = chart;
+            const x = meta.data[0].x;
+            const y = meta.data[0].y;
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#e8eaf0';
+            ctx.font = '700 28px Inter';
+            ctx.fillText(String(activeCount), x, y - 6);
+            ctx.fillStyle = '#8892a4';
+            ctx.font = '600 12px Inter';
+            ctx.fillText('visible', x, y + 18);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    function destroyOverviewChart() {
+      if (appState.charts.overview) {
+        appState.charts.overview.destroy();
+        appState.charts.overview = null;
+      }
+    }
+
+    function updatePanelChrome() {
+      dom.tabButtons.forEach((button) => {
+        const isActive = button.dataset.tab === appState.panel.tab;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-selected', String(isActive));
+      });
+
+      const descriptionMap = {
+        overview: 'Overview, current selections, and shell-level interaction state.',
+        data: 'Per-layer readiness, status routing, and session metadata.',
+        about: 'Methodology, score weighting, and data source design.'
+      };
+      dom.panelDescription.textContent = descriptionMap[appState.panel.tab];
+      setPanelOpen(appState.panel.open, { silentRender: true });
+    }
+
+    function setPanelTab(tab) {
+      appState.panel.tab = tab;
+      renderPanel();
+    }
+
+    function setPanelOpen(open, options = {}) {
+      appState.panel.open = open;
+      dom.sidePanel.classList.toggle('closed', !open);
+      dom.panelToggle.classList.toggle('closed', !open);
+      dom.panelToggle.setAttribute('aria-expanded', String(open));
+      dom.panelToggleLabel.textContent = open ? 'Hide panel' : 'Show panel';
+      dom.panelToggleIcon.textContent = open ? '⟶' : '⟵';
+      if (!options.silentRender) {
+        renderLayerSummary();
+      }
+    }
+
+    function toggleLayer(key) {
+      appState.activeLayers[key] = !appState.activeLayers[key];
+      appState.panel.activeDetail = key;
+      appState.selection = {
+        type: 'layer-focus',
+        label: LAYER_DEFINITIONS[key].label,
+        description: `${LAYER_DEFINITIONS[key].detail} ${appState.activeLayers[key] ? 'Layer is armed in the shell.' : 'Layer is currently hidden.'}`
+      };
+      setPanelOpen(true, { silentRender: true });
+      updateLastUpdated(`${LAYER_DEFINITIONS[key].short} ${appState.activeLayers[key] ? 'enabled' : 'disabled'}`);
+      renderLayerButtons();
+      renderLayerSummary();
+      renderLegend();
+      renderPanel();
+    }
+
+    function handleMapClick(lngLat) {
+      const selection = buildCoordinateSelection(lngLat.lng, lngLat.lat);
+      appState.selection = selection;
+      appState.panel.activeDetail = 'map-click';
+      setPanelOpen(true, { silentRender: true });
+      renderLayerSummary();
+      renderPanel();
+      updateLastUpdated('Map context captured');
+
+      if (appState.map) {
+        new maplibregl.Popup({ offset: 18 })
+          .setLngLat([lngLat.lng, lngLat.lat])
+          .setHTML(`
+            <div class="map-popup">
+              <h3>Location context captured</h3>
+              <p>${escapeHtml(selection.formattedCoordinates)}<br />${escapeHtml(selection.distanceFromCore)} from Liverpool core.</p>
+            </div>
+          `)
+          .addTo(appState.map);
+      }
+    }
+
+    async function handleSearchSubmit(event) {
+      event.preventDefault();
+      const rawPostcode = dom.postcodeInput.value.trim();
+      if (!rawPostcode) {
+        setBanner({
+          title: 'Postcode required',
+          message: 'Enter a Liverpool postcode to fly the map to a specific location.'
+        });
+        return;
+      }
+
+      appState.search.pending = true;
+      appState.search.lastQuery = rawPostcode;
+      dom.searchButton.disabled = true;
+      dom.searchButton.textContent = 'Searching…';
+      dom.livePillText.textContent = 'Resolving postcode';
+
+      try {
+        const response = await fetchJsonWithTimeout(`https://api.postcodes.io/postcodes/${encodeURIComponent(rawPostcode)}`, 8000);
+        if (!response.result) {
+          throw new Error('That postcode could not be resolved.');
+        }
+
+        const result = response.result;
+        const lng = result.longitude;
+        const lat = result.latitude;
+        const selection = buildSearchSelection(result);
+        appState.search.result = selection;
+        appState.selection = selection;
+        appState.panel.activeDetail = 'search';
+        clearBanner();
+
+        if (appState.map) {
+          appState.map.flyTo({ center: [lng, lat], zoom: 14.5, essential: true, speed: 0.8 });
+          new maplibregl.Popup({ offset: 16 })
+            .setLngLat([lng, lat])
+            .setHTML(`
+              <div class="map-popup">
+                <h3>${escapeHtml(selection.postcode)}</h3>
+                <p>${escapeHtml(selection.admin)}<br />${escapeHtml(selection.distanceFromCore)} from Liverpool core.</p>
+              </div>
+            `)
+            .addTo(appState.map);
+        }
+
+        setPanelOpen(true, { silentRender: true });
+        renderLayerSummary();
+        renderPanel();
+        updateLastUpdated(`Postcode resolved: ${selection.postcode}`);
+        dom.livePillText.textContent = selection.insideLiverpool ? 'Liverpool postcode locked' : 'Outside core focus';
+      } catch (error) {
+        setBanner({
+          title: 'Search failed',
+          message: error.message || 'Postcode lookup failed.'
+        });
+        dom.livePillText.textContent = 'Search issue';
+      } finally {
+        appState.search.pending = false;
+        dom.searchButton.disabled = false;
+        dom.searchButton.textContent = 'Search';
+      }
+    }
+
+    async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(`Request failed with ${response.status}.`);
+        }
+        return await response.json();
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw new Error('The postcode lookup timed out.');
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    function buildCoordinateSelection(lng, lat) {
+      const distance = computeDistanceFromCore(lng, lat);
+      return {
+        type: 'map-click',
+        label: 'Map click',
+        coordinates: [lng, lat],
+        formattedCoordinates: formatCoordinates(lat, lng),
+        distanceFromCore: `${distance.toFixed(1)} km`,
+        description: 'Bare-map click selection captured.'
+      };
+    }
+
+    function buildSearchSelection(result) {
+      const distance = computeDistanceFromCore(result.longitude, result.latitude);
+      return {
+        type: 'search-result',
+        label: result.postcode,
+        postcode: result.postcode,
+        admin: result.admin_district || result.admin_ward || 'Unknown district',
+        country: result.country || 'United Kingdom',
+        coordinates: [result.longitude, result.latitude],
+        formattedCoordinates: formatCoordinates(result.latitude, result.longitude),
+        distanceFromCore: `${distance.toFixed(1)} km`,
+        insideLiverpool: isInsideLiverpool(result.longitude, result.latitude)
+      };
+    }
+
+    function computeDistanceFromCore(lng, lat) {
+      if (window.turf) {
+        return turf.distance(
+          turf.point(LIVERPOOL_CENTER),
+          turf.point([lng, lat]),
+          { units: 'kilometers' }
+        );
+      }
+
+      const dLat = (lat - LIVERPOOL_CENTER[1]) * 111;
+      const dLng = (lng - LIVERPOOL_CENTER[0]) * 68;
+      return Math.sqrt((dLat * dLat) + (dLng * dLng));
+    }
+
+    function isInsideLiverpool(lng, lat) {
+      return lng >= LIVERPOOL_BOUNDS.west && lng <= LIVERPOOL_BOUNDS.east && lat >= LIVERPOOL_BOUNDS.south && lat <= LIVERPOOL_BOUNDS.north;
+    }
+
+    function updateViewportReadout({ lat, lng, zoom }) {
+      dom.viewportReadout.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)} · z${zoom.toFixed(1)}`;
+    }
+
+    function updateLastUpdated(reason) {
+      const timestamp = new Date();
+      appState.lastUpdated = { timestamp, reason };
+      dom.lastUpdated.textContent = formatLastUpdated(appState.lastUpdated);
+    }
+
+    function formatLastUpdated(payload) {
+      if (!payload?.timestamp) {
+        return 'No updates yet';
+      }
+      const time = new Intl.DateTimeFormat([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(payload.timestamp);
+      return `${time} · ${payload.reason}`;
+    }
+
+    function setBanner(banner) {
+      appState.banner = banner;
+      dom.errorTitle.textContent = banner.title;
+      dom.errorMessage.textContent = banner.message;
+      dom.errorBanner.classList.add('visible');
+    }
+
+    function clearBanner() {
+      appState.banner = null;
+      dom.errorBanner.classList.remove('visible');
+    }
+
+    function raiseSystemError(message) {
+      appState.systemError = message;
+      setBanner({
+        title: 'Shell initialisation failed',
+        message
+      });
+      dom.livePillText.textContent = 'System issue';
+      updateLastUpdated('System issue detected');
+      renderPanel();
+    }
+
+    function getSelectionLabel(selection) {
+      if (!selection) return 'No selection';
+      return selection.label || selection.postcode || selection.type || 'Selection';
+    }
+
+    function formatCoordinates(lat, lng) {
+      return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+  </script>
+</body>
+</html>
