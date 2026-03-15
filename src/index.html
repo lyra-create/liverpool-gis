@@ -651,6 +651,130 @@
       font-size: 0.86rem;
     }
 
+    .intel-score-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .intel-score-head h3 {
+      margin: 10px 0 6px;
+      font-size: 1.08rem;
+    }
+
+    .intel-score-head p {
+      margin: 0;
+      color: var(--text-soft);
+      font-size: 0.84rem;
+      line-height: 1.55;
+    }
+
+    .intel-gauge-wrap {
+      position: relative;
+      width: 124px;
+      min-width: 124px;
+      height: 124px;
+      display: grid;
+      place-items: center;
+    }
+
+    .intel-gauge {
+      width: 124px;
+      height: 124px;
+      transform: rotate(-90deg);
+    }
+
+    .intel-gauge-track,
+    .intel-gauge-ring {
+      fill: none;
+      stroke-width: 10;
+    }
+
+    .intel-gauge-track {
+      stroke: rgba(255, 255, 255, 0.08);
+    }
+
+    .intel-gauge-ring {
+      stroke: var(--intel-color, var(--accent-green));
+      stroke-linecap: round;
+      transition: stroke-dasharray 180ms ease, stroke 180ms ease;
+    }
+
+    .intel-gauge-value {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .intel-gauge-value strong {
+      display: block;
+      font-size: 1.8rem;
+      line-height: 1;
+      color: var(--text);
+    }
+
+    .intel-gauge-value span {
+      display: block;
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .intel-narrative {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+      line-height: 1.6;
+    }
+
+    .intel-bar-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .intel-bar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+      font-size: 0.82rem;
+      color: var(--text-soft);
+    }
+
+    .intel-bar-head strong {
+      color: var(--text);
+      font-size: 0.84rem;
+    }
+
+    .intel-bar-track {
+      position: relative;
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    .intel-bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: var(--intel-bar-width, 50%);
+      border-radius: 999px;
+      background: var(--intel-bar-color, var(--accent-blue));
+      box-shadow: 0 0 16px rgba(255, 255, 255, 0.12);
+    }
+
     .data-table {
       width: 100%;
       border-collapse: collapse;
@@ -1695,7 +1819,10 @@
       systemError: null,
       banner: null,
       popups: {},
-      suppressedMapClickUntil: 0
+      suppressedMapClickUntil: 0,
+      intel: {
+        lastScore: null
+      }
     };
 
     const LayerRegistry = {
@@ -1952,6 +2079,9 @@
       });
 
       appState.map.on('click', (event) => {
+        if (isInteractiveMapFeatureClick(event)) {
+          return;
+        }
         handleMapClick(event.lngLat);
       });
 
@@ -2079,6 +2209,11 @@
             return;
           }
         }
+      }
+
+      if (appState.panel.activeDetail === 'intel' && appState.intel.lastScore) {
+        dom.panelBody.innerHTML = renderIntelScorePanel(appState.intel.lastScore);
+        return;
       }
 
       if (appState.panel.tab === 'overview') {
@@ -2280,7 +2415,16 @@
         return `
           <div class="info-card">
             <h3>Map click captured</h3>
-            <p>${escapeHtml(selection.formattedCoordinates)} · ${escapeHtml(selection.distanceFromCore)} from Liverpool core. This selection will become the input for the Business Insight Engine once the score inputs are wired.</p>
+            <p>${escapeHtml(selection.formattedCoordinates)} · ${escapeHtml(selection.distanceFromCore)} from Liverpool core. Bare-map clicks now route straight into the live Business Insight Engine.</p>
+          </div>
+        `;
+      }
+
+      if (selection.type === 'intel-score' && selection.intel) {
+        return `
+          <div class="info-card">
+            <h3>${escapeHtml(selection.contextLabel || getSelectionLabel(selection))}</h3>
+            <p>Intel Score ${selection.intel.overall.toFixed(1)}/10 · ${escapeHtml(selection.intel.narrative)}</p>
           </div>
         `;
       }
@@ -2291,6 +2435,416 @@
           <p>${escapeHtml(selection.description || 'Current context is loaded and ready for layer detail content.')}</p>
         </div>
       `;
+    }
+
+    function clampNumber(value, min = 0, max = 10) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function roundIntelScore(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    function getIntelScoreColor(score) {
+      if (score >= 7.5) return '#22c55e';
+      if (score >= 5) return '#ffd700';
+      if (score >= 3) return '#f97316';
+      return '#ff3b3b';
+    }
+
+    function isInteractiveMapFeatureClick(event) {
+      if (!appState.map || !event?.point) return false;
+      const interactiveLayers = [
+        typeof DEPRIVATION_CONFIG !== 'undefined' ? DEPRIVATION_CONFIG.layerId : null,
+        typeof TRANSPORT_CONFIG !== 'undefined' ? TRANSPORT_CONFIG.layerId : null
+      ].filter((layerId) => layerId && appState.map.getLayer(layerId));
+      if (!interactiveLayers.length) return false;
+      return appState.map.queryRenderedFeatures(event.point, { layers: interactiveLayers }).length > 0;
+    }
+
+    function getLoadedCrimeIncidents() {
+      if (crimeState.filteredIncidents.length) return crimeState.filteredIncidents;
+      if (crimeState.incidents.length) return crimeState.incidents;
+      return [];
+    }
+
+    function getNearestAirStationForIntel(referenceCoordinates) {
+      if (!airState.stations.length) return null;
+      return airState.stations
+        .map((station) => ({
+          ...station,
+          distanceKm: computeDistanceKm(referenceCoordinates, station.coordinates)
+        }))
+        .sort((a, b) => a.distanceKm - b.distanceKm)[0] || null;
+    }
+
+    function getNearestTransportNodeForIntel(referenceCoordinates) {
+      if (!transportState.nodes.length) return null;
+      return transportState.nodes
+        .map((node) => ({
+          ...node,
+          distanceKm: computeDistanceKm(referenceCoordinates, node.coordinates)
+        }))
+        .sort((a, b) => a.distanceKm - b.distanceKm)[0] || null;
+    }
+
+    function projectCoordinatesToMeters(coordinates, origin = LIVERPOOL_CENTER) {
+      const lngScale = Math.cos((origin[1] * Math.PI) / 180) * 111320;
+      return {
+        x: (coordinates[0] - origin[0]) * lngScale,
+        y: (coordinates[1] - origin[1]) * 111320
+      };
+    }
+
+    function roundHexCoordinates(q, r) {
+      let x = q;
+      let z = r;
+      let y = -x - z;
+      let rx = Math.round(x);
+      let ry = Math.round(y);
+      let rz = Math.round(z);
+
+      const xDiff = Math.abs(rx - x);
+      const yDiff = Math.abs(ry - y);
+      const zDiff = Math.abs(rz - z);
+
+      if (xDiff > yDiff && xDiff > zDiff) {
+        rx = -ry - rz;
+      } else if (yDiff > zDiff) {
+        ry = -rx - rz;
+      } else {
+        rz = -rx - ry;
+      }
+
+      return { q: rx, r: rz };
+    }
+
+    function getBusinessHexCell(coordinates, sizeMeters = BUSINESS_CONFIG.radiusMeters || 200) {
+      const projected = projectCoordinatesToMeters(coordinates);
+      const q = ((Math.sqrt(3) / 3) * projected.x - (1 / 3) * projected.y) / sizeMeters;
+      const r = ((2 / 3) * projected.y) / sizeMeters;
+      const rounded = roundHexCoordinates(q, r);
+      const centerX = sizeMeters * Math.sqrt(3) * (rounded.q + (rounded.r / 2));
+      const centerY = sizeMeters * 1.5 * rounded.r;
+      const lngScale = Math.cos((LIVERPOOL_CENTER[1] * Math.PI) / 180) * 111320;
+      const center = [
+        LIVERPOOL_CENTER[0] + (centerX / lngScale),
+        LIVERPOOL_CENTER[1] + (centerY / 111320)
+      ];
+      return {
+        ...rounded,
+        key: `${rounded.q},${rounded.r}`,
+        center
+      };
+    }
+
+    function getBusinessHexMetrics(referenceCoordinates) {
+      if (!businessState.pois.length) return null;
+      const counts = new Map();
+      const centers = new Map();
+
+      businessState.pois.forEach((poi) => {
+        const cell = getBusinessHexCell(poi.coordinates);
+        counts.set(cell.key, (counts.get(cell.key) || 0) + 1);
+        if (!centers.has(cell.key)) {
+          centers.set(cell.key, cell.center);
+        }
+      });
+
+      if (!counts.size) return null;
+
+      const targetCell = getBusinessHexCell(referenceCoordinates);
+      let nearestKey = counts.has(targetCell.key) ? targetCell.key : null;
+      let nearestDistanceKm = Number.POSITIVE_INFINITY;
+
+      if (!nearestKey) {
+        counts.forEach((count, key) => {
+          const center = centers.get(key);
+          const distanceKm = computeDistanceKm(referenceCoordinates, center);
+          if (distanceKm < nearestDistanceKm) {
+            nearestDistanceKm = distanceKm;
+            nearestKey = key;
+          }
+        });
+      } else {
+        nearestDistanceKm = computeDistanceKm(referenceCoordinates, centers.get(nearestKey));
+      }
+
+      const maxCount = Math.max(...counts.values(), 1);
+      const count = counts.get(nearestKey) || 0;
+      return {
+        key: nearestKey,
+        count,
+        maxCount,
+        center: centers.get(nearestKey) || referenceCoordinates,
+        distanceKm: nearestDistanceKm,
+        score: roundIntelScore(clampNumber((count / maxCount) * 10))
+      };
+    }
+
+    function getContainingDeprivationFeature(referenceCoordinates) {
+      if (!deprivationState.data?.features?.length || !window.turf) return null;
+      const point = turf.point(referenceCoordinates);
+      return deprivationState.data.features.find((feature) => {
+        try {
+          return turf.booleanPointInPolygon(point, feature);
+        } catch {
+          return false;
+        }
+      }) || null;
+    }
+
+    function buildIntelNarrative(intel) {
+      const { subScores, deprivationDecile, defaultedDimensions } = intel;
+      if (subScores.businessDensity >= 7 && subScores.connectivity >= 7) {
+        return 'Commercial hub — dense nearby business activity paired with strong transport access.';
+      }
+      if (Number.isFinite(deprivationDecile) && deprivationDecile <= 3 && subScores.businessDensity <= 4.5) {
+        return 'Social enterprise opportunity — higher deprivation need meets limited local business provision.';
+      }
+      if (subScores.safety >= 7 && subScores.businessDensity <= 4.5) {
+        return 'Underserved residential area — safer local context, but still light on nearby business supply.';
+      }
+      if (defaultedDimensions.length) {
+        return `Partial Intel Score — ${defaultedDimensions.join(', ')} is still on a neutral default while those layers load.`;
+      }
+      if (subScores.airQuality <= 4 && subScores.businessDensity >= 6) {
+        return 'Active urban catchment with weaker air quality — demand is present, but exposure-sensitive uses need care.';
+      }
+      if (subScores.safety >= 6 && subScores.connectivity >= 6) {
+        return 'Balanced mixed-use catchment — solid access and acceptable operating conditions without a single extreme signal.';
+      }
+      return 'Mixed location signal — treat this area as a blended catchment rather than a clear single-use archetype.';
+    }
+
+    function calculateIntelScore(lngLat) {
+      const coordinates = Array.isArray(lngLat)
+        ? [Number(lngLat[0]), Number(lngLat[1])]
+        : [Number(lngLat?.lng), Number(lngLat?.lat)];
+      const defaultedDimensions = [];
+      const subScores = {
+        safety: 5,
+        airQuality: 5,
+        connectivity: 5,
+        deprivation: 5,
+        businessDensity: 5
+      };
+
+      const incidents = getLoadedCrimeIncidents();
+      let crimeContext = null;
+      if (incidents.length) {
+        const radiusKm = 0.5;
+        const areaKm2 = Math.PI * radiusKm * radiusKm;
+        const localCount = incidents.reduce((total, incident) => {
+          const distanceKm = window.turf
+            ? turf.distance(turf.point(coordinates), turf.point(incident.coordinates), { units: 'kilometers' })
+            : computeDistanceKm(coordinates, incident.coordinates);
+          return total + (distanceKm <= radiusKm ? 1 : 0);
+        }, 0);
+        const densityPerKm2 = localCount / areaKm2;
+        subScores.safety = roundIntelScore(clampNumber(10 - ((densityPerKm2 / 15) * 10)));
+        crimeContext = { radiusKm, localCount, densityPerKm2: roundIntelScore(densityPerKm2) };
+      } else {
+        defaultedDimensions.push('Safety');
+      }
+
+      const nearestAirStation = getNearestAirStationForIntel(coordinates);
+      if (nearestAirStation) {
+        const daqi = clampNumber(Number(nearestAirStation.daqi) || 5, 1, 10);
+        subScores.airQuality = roundIntelScore(11 - daqi);
+      } else {
+        defaultedDimensions.push('Air Quality');
+      }
+
+      const nearestTransport = getNearestTransportNodeForIntel(coordinates);
+      if (nearestTransport) {
+        subScores.connectivity = roundIntelScore(clampNumber(10 - ((Math.min(nearestTransport.distanceKm, 2) / 2) * 10)));
+      } else {
+        defaultedDimensions.push('Connectivity');
+      }
+
+      const deprivationFeature = getContainingDeprivationFeature(coordinates);
+      const deprivationDecile = Number(deprivationFeature?.properties?.IMD19_DECILE);
+      if (Number.isFinite(deprivationDecile)) {
+        subScores.deprivation = roundIntelScore(clampNumber(deprivationDecile, 0, 10));
+      } else {
+        defaultedDimensions.push('Deprivation');
+      }
+
+      const businessHex = getBusinessHexMetrics(coordinates);
+      if (businessHex) {
+        subScores.businessDensity = businessHex.score;
+      } else {
+        defaultedDimensions.push('Business Density');
+      }
+
+      const overall = roundIntelScore(
+        (subScores.safety * 0.25)
+        + (subScores.deprivation * 0.25)
+        + (subScores.connectivity * 0.2)
+        + (subScores.businessDensity * 0.2)
+        + (subScores.airQuality * 0.1)
+      );
+
+      const intel = {
+        coordinates,
+        overall,
+        subScores,
+        crimeContext,
+        nearestAirStation,
+        nearestTransport,
+        deprivationFeature,
+        deprivationDecile: Number.isFinite(deprivationDecile) ? deprivationDecile : null,
+        businessHex,
+        defaultedDimensions
+      };
+      intel.narrative = buildIntelNarrative(intel);
+      return intel;
+    }
+
+    function renderIntelScoreBar(label, score, color, note = '') {
+      return `
+        <div class="intel-bar">
+          <div class="intel-bar-head">
+            <strong>${escapeHtml(label)}</strong>
+            <span>${score.toFixed(1)}/10${note ? ` · ${escapeHtml(note)}` : ''}</span>
+          </div>
+          <div class="intel-bar-track">
+            <span class="intel-bar-fill" style="--intel-bar-width:${clampNumber(score, 0, 10) * 10}%; --intel-bar-color:${color};"></span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderIntelScorePanel(intel) {
+      const radius = 36;
+      const circumference = 2 * Math.PI * radius;
+      const progress = (clampNumber(intel.overall, 0, 10) / 10) * circumference;
+      const gaugeColor = getIntelScoreColor(intel.overall);
+      const coordinatesLabel = formatCoordinates(intel.coordinates[1], intel.coordinates[0]);
+      const contextLabel = intel.sourceType === 'search'
+        ? `Intel Score · ${intel.postcode || 'Postcode search'}`
+        : 'Intel Score · Clicked location';
+      const contextMeta = intel.sourceType === 'search'
+        ? `${intel.admin || 'Liverpool'} · ${coordinatesLabel}`
+        : `${coordinatesLabel} · ${intel.distanceFromCore || `${computeDistanceFromCore(intel.coordinates[0], intel.coordinates[1]).toFixed(1)} km`} from Liverpool core`;
+      const fallbackCard = intel.defaultedDimensions.length
+        ? `
+          <div class="info-card">
+            <h3>Fallback dimensions</h3>
+            <p>${escapeHtml(intel.defaultedDimensions.join(', '))} is still sitting at the neutral 5/10 until those layers are loaded.</p>
+          </div>
+        `
+        : '';
+      const deprivationLabel = Number.isFinite(intel.deprivationDecile)
+        ? `Decile ${intel.deprivationDecile}${intel.deprivationFeature?.properties?.LSOA19NM ? ` · ${intel.deprivationFeature.properties.LSOA19NM}` : ''}`
+        : 'Layer not loaded';
+      const businessLabel = intel.businessHex
+        ? `${intel.businessHex.count}/${intel.businessHex.maxCount} venues in nearest hex`
+        : 'Layer not loaded';
+      const airLabel = intel.nearestAirStation
+        ? `${intel.nearestAirStation.name} · DAQI ${intel.nearestAirStation.daqi}`
+        : 'Layer not loaded';
+      const transportLabel = intel.nearestTransport
+        ? `${intel.nearestTransport.name} · ${intel.nearestTransport.distanceKm.toFixed(2)} km`
+        : 'Layer not loaded';
+      const crimeLabel = intel.crimeContext
+        ? `${intel.crimeContext.localCount} incidents within 500m`
+        : 'Layer not loaded';
+
+      return `
+        <div class="stack">
+          <div class="info-card">
+            <div class="intel-score-head">
+              <div>
+                <span class="status-badge active">Intel Score</span>
+                <h3>${escapeHtml(contextLabel)}</h3>
+                <p>${escapeHtml(contextMeta)}</p>
+              </div>
+              <div class="intel-gauge-wrap" style="--intel-color:${gaugeColor}">
+                <svg class="intel-gauge" viewBox="0 0 100 100" role="img" aria-label="Intel Score ${intel.overall.toFixed(1)} out of 10">
+                  <circle class="intel-gauge-track" cx="50" cy="50" r="${radius}"></circle>
+                  <circle class="intel-gauge-ring" cx="50" cy="50" r="${radius}" stroke-dasharray="${progress.toFixed(2)} ${circumference.toFixed(2)}"></circle>
+                </svg>
+                <div class="intel-gauge-value">
+                  <div>
+                    <strong>${intel.overall.toFixed(1)}</strong>
+                    <span>overall</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="intel-narrative">${escapeHtml(intel.narrative)}</p>
+            <div class="intel-bar-list">
+              ${renderIntelScoreBar('Safety', intel.subScores.safety, LAYER_DEFINITIONS.crime.color, crimeLabel)}
+              ${renderIntelScoreBar('Air Quality', intel.subScores.airQuality, LAYER_DEFINITIONS.air.color, airLabel)}
+              ${renderIntelScoreBar('Connectivity', intel.subScores.connectivity, LAYER_DEFINITIONS.transport.color, transportLabel)}
+              ${renderIntelScoreBar('Deprivation', intel.subScores.deprivation, LAYER_DEFINITIONS.deprivation.color, deprivationLabel)}
+              ${renderIntelScoreBar('Business Density', intel.subScores.businessDensity, LAYER_DEFINITIONS.business.color, businessLabel)}
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <div class="metric-card">
+              <span class="metric-label">Nearest transport</span>
+              <span class="metric-value">${escapeHtml(intel.nearestTransport ? intel.nearestTransport.name : 'Default 5')}</span>
+              <span class="metric-note">${escapeHtml(intel.nearestTransport ? `${intel.nearestTransport.distanceKm.toFixed(2)} km away` : 'Connectivity layer not loaded yet.')}</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Nearest air station</span>
+              <span class="metric-value">${escapeHtml(intel.nearestAirStation ? intel.nearestAirStation.name : 'Default 5')}</span>
+              <span class="metric-note">${escapeHtml(intel.nearestAirStation ? `DAQI ${intel.nearestAirStation.daqi} · ${intel.nearestAirStation.distanceKm.toFixed(2)} km away` : 'Air layer not loaded yet.')}</span>
+            </div>
+          </div>
+
+          ${fallbackCard}
+        </div>
+      `;
+    }
+
+    function focusIntelScore(coordinates, options = {}) {
+      const lng = Array.isArray(coordinates) ? Number(coordinates[0]) : Number(coordinates?.lng);
+      const lat = Array.isArray(coordinates) ? Number(coordinates[1]) : Number(coordinates?.lat);
+      const intel = calculateIntelScore([lng, lat]);
+      const selection = options.sourceType === 'search'
+        ? buildSearchSelection({
+          postcode: options.postcode || 'Search',
+          admin_district: options.admin || 'Liverpool',
+          country: options.country || 'United Kingdom',
+          longitude: lng,
+          latitude: lat
+        })
+        : buildCoordinateSelection(lng, lat);
+
+      const scorePayload = {
+        ...intel,
+        sourceType: options.sourceType || 'map-click',
+        postcode: options.postcode || null,
+        admin: options.admin || null,
+        country: options.country || null,
+        contextLabel: options.sourceType === 'search' ? `Intel · ${options.postcode || 'Search result'}` : 'Intel · Clicked location',
+        distanceFromCore: selection.distanceFromCore,
+        formattedCoordinates: selection.formattedCoordinates
+      };
+
+      appState.intel.lastScore = scorePayload;
+      appState.selection = {
+        type: 'intel-score',
+        label: options.postcode ? `Intel · ${options.postcode}` : 'Intel Score',
+        contextLabel: scorePayload.contextLabel,
+        coordinates: [lng, lat],
+        description: `Intel Score ${scorePayload.overall.toFixed(1)}/10 · ${scorePayload.narrative}`,
+        intel: scorePayload
+      };
+      appState.panel.activeDetail = 'intel';
+      dom.livePillText.textContent = 'Intel Score ready';
+      setPanelOpen(true, { silentRender: true });
+      renderLayerSummary();
+      renderPanel();
+      updateLastUpdated(options.sourceType === 'search'
+        ? `Intel Score calculated for ${options.postcode || 'postcode search'}`
+        : 'Intel Score calculated for clicked location');
+      return scorePayload;
     }
 
     function renderOverviewChart() {
@@ -2439,21 +2993,16 @@
       if (Date.now() < (appState.suppressedMapClickUntil || 0)) {
         return;
       }
-      const selection = buildCoordinateSelection(lngLat.lng, lngLat.lat);
-      appState.selection = selection;
-      appState.panel.activeDetail = 'map-click';
-      setPanelOpen(true, { silentRender: true });
-      renderLayerSummary();
-      renderPanel();
-      updateLastUpdated('Map context captured');
+      const intel = focusIntelScore([lngLat.lng, lngLat.lat], { sourceType: 'map-click' });
 
       if (appState.map) {
+        const selection = buildCoordinateSelection(lngLat.lng, lngLat.lat);
         const popup = new maplibregl.Popup({ offset: 18 })
           .setLngLat([lngLat.lng, lngLat.lat])
           .setHTML(`
             <div class="map-popup">
-              <h3>Location context captured</h3>
-              <p>${escapeHtml(selection.formattedCoordinates)}<br />${escapeHtml(selection.distanceFromCore)} from Liverpool core.</p>
+              <h3>Intel Score ${intel.overall.toFixed(1)}/10</h3>
+              <p>${escapeHtml(selection.formattedCoordinates)}<br />${escapeHtml(intel.narrative)}</p>
             </div>
           `)
           .addTo(appState.map);
@@ -2493,7 +3042,15 @@
         appState.panel.activeDetail = 'search';
         clearBanner();
 
+        const triggerIntelScore = () => focusIntelScore([lng, lat], {
+          sourceType: 'search',
+          postcode: selection.postcode,
+          admin: selection.admin,
+          country: selection.country
+        });
+
         if (appState.map) {
+          appState.map.once('moveend', triggerIntelScore);
           appState.map.flyTo({ center: [lng, lat], zoom: 14.5, essential: true, speed: 0.8 });
           const popup = new maplibregl.Popup({ offset: 16 })
             .setLngLat([lng, lat])
@@ -2505,6 +3062,8 @@
             `)
             .addTo(appState.map);
           addLayerPopup('_system', popup);
+        } else {
+          triggerIntelScore();
         }
 
         setPanelOpen(true, { silentRender: true });
