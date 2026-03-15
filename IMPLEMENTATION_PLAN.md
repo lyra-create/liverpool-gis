@@ -7,6 +7,11 @@
 - Spec update applied: `specs/01-map-foundation.md` now includes the required Flood Risk toggle (7 total layer buttons).
 - New cross-cutting spec added: `specs/08-shared-state-and-data-orchestration.md` for single-file state, caching, fallback data, legend, panel, and chart lifecycle requirements.
 
+## Summary
+**✓ P0 & P1 Complete:** Shell (full single-file app, 2156 lines, zero placeholders, all controls wired) and Deprivation layer (ONS IMD GeoJSON, 5-step choropleth, hover/click popups, histogram panel, legend integration) are live and validated on Playwright (no console errors beyond benign favicon/WebGL warnings).
+
+**Next task:** Crime heatmap (P1) — deck.gl HeatmapLayer, data.police.uk API fetch/cache, category filter UI, month switcher, hotspot callout.
+
 ## Priority plan
 - [x] **P0 — Build the single-file app shell in `src/index.html`.** Create the HTML/CSS/JS scaffold for Liverpool Intel: MapLibre map container, header with search + live timestamp, layer controls, collapsible Overview/Data/About panel, legend, footer, error banner, mobile/desktop responsive behaviour, CDN loading for MapLibre/deck.gl/Turf/Chart.js, and initial dark Gulf Watch styling tokens. **DONE:** 60.5 KB single file, no placeholders, all 7 layer buttons functional, panel tabs route Overview/Data/About, legend updates dynamically, postcode search works with postcodes.io API, map-click context capture, Chart.js lifecycle demo on Overview tab, responsive mobile bottom-sheet, dark Gulf Watch design system applied throughout. Validated on Playwright: no console errors (only harmless favicon 404 + WebGL perf warnings), full accessibility tree present.
 
