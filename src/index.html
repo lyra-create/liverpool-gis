@@ -1957,6 +1957,200 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
     }
+
+    // ===== DEPRIVATION LAYER (P1) =====
+    const DEPRIVATION_CONFIG = {
+      sourceId: 'deprivation-lsoa',
+      layerId: 'deprivation-lsoa-fill',
+      strokeLayerId: 'deprivation-lsoa-stroke',
+      fetchUrl: 'https://services3.arcgis.com/ivmBBrHfQfDnDf8Q/arcgis/rest/services/Indices_of_Multiple_Deprivation_(IMD)_2019/FeatureServer/0/query?where=LAD19NM%3D%27Liverpool%27&outFields=*&outSR=4326&f=geojson',
+      cacheKey: 'deprivation_lsoa'
+    };
+    const deprivationState = { data: null, histogram: null, selectedLsoa: null, hoveredFeatureId: null };
+
+    async function loadDeprivationLayer() {
+      appState.loadingLayers.deprivation = true;
+      renderLayerButtons();
+      updateLastUpdated('Deprivation: fetching...');
+      try {
+        let data = null;
+        const cached = sessionStorage.getItem(DEPRIVATION_CONFIG.cacheKey);
+        if (cached) {
+          const { payload, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < 3600000) {
+            data = payload;
+            appState.cacheMeta.deprivation_lsoa = 'From session cache (1 hour TTL)';
+          }
+        }
+        if (!data) {
+          const response = await fetchJsonWithTimeout(DEPRIVATION_CONFIG.fetchUrl, 12000);
+          if (!response.features || response.features.length === 0) throw new Error('No features returned');
+          data = response;
+          sessionStorage.setItem(DEPRIVATION_CONFIG.cacheKey, JSON.stringify({ payload: data, timestamp: Date.now() }));
+          appState.cacheMeta.deprivation_lsoa = `Fresh: ${data.features.length} LSOAs`;
+        }
+        deprivationState.data = data;
+        renderDeprivationMapLayer();
+        computeDeprivationHistogram();
+        appState.loadingLayers.deprivation = false;
+        renderLayerButtons();
+        updateLastUpdated('Deprivation layer active');
+        clearBanner();
+      } catch (error) {
+        appState.layerErrors.deprivation = { message: error.message, error };
+        appState.loadingLayers.deprivation = false;
+        appState.activeLayers.deprivation = false;
+        renderLayerButtons();
+        setBanner({ title: 'Deprivation data unavailable', message: error.message });
+      }
+    }
+
+    function renderDeprivationMapLayer() {
+      if (!appState.map || !deprivationState.data) return;
+      const map = appState.map;
+      const data = deprivationState.data;
+      if (!map.getSource(DEPRIVATION_CONFIG.sourceId)) {
+        map.addSource(DEPRIVATION_CONFIG.sourceId, { type: 'geojson', data });
+      } else {
+        map.getSource(DEPRIVATION_CONFIG.sourceId).setData(data);
+      }
+      const decileColors = ['get', 'IMD19_DECILE', 1, '#dc2626', 2, '#dc2626', 3, '#f97316', 4, '#f97316', 5, '#eab308', 6, '#eab308', 7, '#84cc16', 8, '#84cc16', 9, '#22c55e', 10, '#22c55e', '#999'];
+      if (!map.getLayer(DEPRIVATION_CONFIG.layerId)) {
+        map.addLayer({ id: DEPRIVATION_CONFIG.layerId, type: 'fill', source: DEPRIVATION_CONFIG.sourceId, paint: { 'fill-color': ['case', ['boolean', ['feature-state', 'hover'], false], '#ffffff', decileColors], 'fill-opacity': 0.6 } }, 'carto-dark-base');
+      }
+      if (!map.getLayer(DEPRIVATION_CONFIG.strokeLayerId)) {
+        map.addLayer({ id: DEPRIVATION_CONFIG.strokeLayerId, type: 'line', source: DEPRIVATION_CONFIG.sourceId, paint: { 'line-color': 'rgba(255,255,255,0.15)', 'line-width': 1 } }, 'carto-dark-base');
+      }
+      map.on('mousemove', DEPRIVATION_CONFIG.layerId, (e) => {
+        if (e.features.length > 0) {
+          if (deprivationState.hoveredFeatureId !== null) map.setFeatureState({ source: DEPRIVATION_CONFIG.sourceId, id: deprivationState.hoveredFeatureId }, { hover: false });
+          deprivationState.hoveredFeatureId = e.features[0].id;
+          map.setFeatureState({ source: DEPRIVATION_CONFIG.sourceId, id: deprivationState.hoveredFeatureId }, { hover: true });
+          map.getCanvas().style.cursor = 'pointer';
+        }
+      });
+      map.on('mouseleave', DEPRIVATION_CONFIG.layerId, () => {
+        if (deprivationState.hoveredFeatureId !== null) map.setFeatureState({ source: DEPRIVATION_CONFIG.sourceId, id: deprivationState.hoveredFeatureId }, { hover: false });
+        deprivationState.hoveredFeatureId = null;
+        map.getCanvas().style.cursor = '';
+      });
+      map.on('click', DEPRIVATION_CONFIG.layerId, (e) => {
+        if (e.features.length > 0) {
+          const f = e.features[0];
+          deprivationState.selectedLsoa = f;
+          appState.panel.activeDetail = 'deprivation-lsoa';
+          appState.selection = { type: 'deprivation-lsoa', label: f.properties.LSOA19NM || 'LSOA', description: `Decile ${f.properties.IMD19_DECILE || '?'}` };
+          setPanelOpen(true, { silentRender: true });
+          renderPanel();
+          new maplibregl.Popup({ offset: 16 }).setLngLat(e.lngLat).setHTML(`<div class="map-popup"><h3>${escapeHtml(f.properties.LSOA19NM || 'LSOA')}</h3><p><strong>Decile:</strong> ${f.properties.IMD19_DECILE}<br><strong>Rank:</strong> ${f.properties.IMD19_RANK}</p></div>`).addTo(map);
+        }
+      });
+    }
+
+    function hideDeprivationLayer() {
+      if (!appState.map) return;
+      const map = appState.map;
+      [DEPRIVATION_CONFIG.layerId, DEPRIVATION_CONFIG.strokeLayerId].forEach(id => {
+        if (map.getLayer(id)) map.removeLayer(id);
+      });
+      if (map.getSource(DEPRIVATION_CONFIG.sourceId)) map.removeSource(DEPRIVATION_CONFIG.sourceId);
+      deprivationState.selectedLsoa = null;
+      deprivationState.hoveredFeatureId = null;
+      if (appState.charts.deprivationHistogram) {
+        appState.charts.deprivationHistogram.destroy();
+        appState.charts.deprivationHistogram = null;
+      }
+    }
+
+    function computeDeprivationHistogram() {
+      if (!deprivationState.data) return;
+      const counts = {};
+      for (let i = 1; i <= 10; i++) counts[i] = 0;
+      deprivationState.data.features.forEach(f => {
+        const d = f.properties.IMD19_DECILE;
+        if (d >= 1 && d <= 10) counts[d]++;
+      });
+      deprivationState.histogram = counts;
+    }
+
+    function renderDeprivationPanelContent() {
+      const { data, histogram, selectedLsoa } = deprivationState;
+      if (!data) return '<div class="info-card"><h3>Loading...</h3></div>';
+      const pct = ((histogram[1] + histogram[2]) / data.features.length * 100).toFixed(1);
+      let detail = '';
+      if (selectedLsoa) {
+        detail = `<div class="info-card"><h3>${escapeHtml(selectedLsoa.properties.LSOA19NM || 'LSOA')}</h3><ul class="detail-list"><li><strong>Decile</strong>${selectedLsoa.properties.IMD19_DECILE}</li><li><strong>Rank</strong>${selectedLsoa.properties.IMD19_RANK}</li><li><strong>Context</strong>Decile 1–2 are the most deprived 10% nationally.</li></ul></div>`;
+      }
+      return `<div class="stack"><div class="metric-grid"><div class="metric-card"><span class="metric-label">LSOAs</span><span class="metric-value">${data.features.length}</span></div><div class="metric-card"><span class="metric-label">Most deprived</span><span class="metric-value">${pct}%</span></div></div><div class="info-card"><h3>Distribution</h3><p>IMD decile histogram for Liverpool.</p><canvas id="deprivation-histogram" height="220"></canvas></div>${detail}<div class="info-card"><h3>Insight</h3><p>High deprivation areas = essential services, value retail, social enterprise opportunity.</p></div></div>`;
+    }
+
+    function renderDeprivationHistogram() {
+      const canvas = document.getElementById('deprivation-histogram');
+      if (!canvas || !window.Chart) return;
+      if (appState.charts.deprivationHistogram) appState.charts.deprivationHistogram.destroy();
+      const h = deprivationState.histogram || {};
+      appState.charts.deprivationHistogram = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: Array.from({ length: 10 }, (_, i) => `D${i+1}`),
+          datasets: [{ label: 'LSOAs', data: Array.from({ length: 10 }, (_, i) => h[i+1] || 0), backgroundColor: ['#dc2626', '#dc2626', '#f97316', '#f97316', '#eab308', '#eab308', '#84cc16', '#84cc16', '#22c55e', '#22c55e'], borderRadius: 8 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(10,12,15,0.96)', titleColor: '#e8eaf0', bodyColor: '#c7d0de', borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1 } }, scales: { y: { ticks: { color: '#8892a4' }, grid: { color: 'rgba(255,255,255,0.04)' } }, x: { ticks: { color: '#8892a4' }, grid: { display: false } } } }
+      });
+    }
+
+    const layerModules = {
+      deprivation: {
+        load: loadDeprivationLayer,
+        hide: hideDeprivationLayer,
+        getLegendItems: () => [
+          { type: 'chip', label: 'Decile 1–2', color: '#dc2626' },
+          { type: 'chip', label: 'Decile 3–4', color: '#f97316' },
+          { type: 'chip', label: 'Decile 5–6', color: '#eab308' },
+          { type: 'chip', label: 'Decile 7–8', color: '#84cc16' },
+          { type: 'chip', label: 'Decile 9–10', color: '#22c55e' }
+        ]
+      }
+    };
+
+    const baseToggleLayer = toggleLayer;
+    toggleLayer = function(key) {
+      appState.activeLayers[key] = !appState.activeLayers[key];
+      appState.panel.activeDetail = key;
+      appState.selection = { type: 'layer-focus', label: LAYER_DEFINITIONS[key].label, description: LAYER_DEFINITIONS[key].detail };
+      setPanelOpen(true, { silentRender: true });
+      updateLastUpdated(`${LAYER_DEFINITIONS[key].short} ${appState.activeLayers[key] ? 'enabled' : 'disabled'}`);
+      if (appState.activeLayers[key] && layerModules[key]?.load) layerModules[key].load();
+      else if (!appState.activeLayers[key] && layerModules[key]?.hide) layerModules[key].hide();
+      renderLayerButtons();
+      renderLayerSummary();
+      renderLegend();
+      renderPanel();
+    };
+
+    const baseRenderPanel = renderPanel;
+    renderPanel = function() {
+      updatePanelChrome();
+      destroyOverviewChart();
+      if ((appState.panel.activeDetail === 'deprivation' || appState.panel.activeDetail === 'deprivation-lsoa') && (appState.panel.tab === 'overview' || appState.panel.tab === 'data')) {
+        dom.panelBody.innerHTML = renderDeprivationPanelContent();
+        requestAnimationFrame(() => renderDeprivationHistogram());
+        return;
+      }
+      baseRenderPanel();
+    };
+
+    const baseRenderLegend = renderLegend;
+    renderLegend = function() {
+      baseRenderLegend();
+      if (appState.activeLayers.deprivation && layerModules.deprivation?.getLegendItems) {
+        const content = document.getElementById('legend-content');
+        if (content) {
+          const items = layerModules.deprivation.getLegendItems();
+          content.innerHTML += `<div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.08)"><div class="legend-items">${items.map(i => `<div class="legend-item"><span class="legend-chip" style="background:${i.color}"></span><div><strong>Deprivation</strong> ${escapeHtml(i.label)}</div></div>`).join('')}</div></div>`;
+        }
+      }
+    };
   </script>
 </body>
 </html>

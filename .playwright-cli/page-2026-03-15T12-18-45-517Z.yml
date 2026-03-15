@@ -1,0 +1,116 @@
+- generic [ref=e2]:
+  - generic "Liverpool map" [ref=e3]:
+    - region "Map" [ref=e4]
+    - generic:
+      - generic:
+        - group [ref=e5]:
+          - generic "Toggle attribution" [ref=e6] [cursor=pointer]
+          - generic [ref=e7]: © OpenStreetMap contributors © CARTO
+        - generic [ref=e8]:
+          - button "Zoom in" [ref=e9] [cursor=pointer]
+          - button "Zoom out" [ref=e11] [cursor=pointer]
+          - button "Reset bearing to north" [ref=e13]
+  - banner [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - heading "Liverpool Intel" [level=1] [ref=e18]
+        - generic [ref=e21]: Shell online
+      - paragraph [ref=e22]: Dark GIS command deck for Liverpool open data, commercial context, and location intelligence.
+    - generic [ref=e23]:
+      - generic [ref=e24]: ⌕
+      - generic [ref=e25]: Search Liverpool postcode
+      - textbox "Search Liverpool postcode" [ref=e26]: L1 8JQ
+      - button "Search" [ref=e27] [cursor=pointer]
+    - generic [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]: Last updated
+        - generic [ref=e31]: 04:18 PM · Initialising shell
+      - generic [ref=e32]:
+        - generic [ref=e33]: Viewport
+        - generic [ref=e34]: 53.4084, -2.9916 · z12.0
+  - complementary "Layer controls" [ref=e35]:
+    - paragraph [ref=e36]: Layers
+    - heading "Toggle the intelligence stack" [level=2] [ref=e37]
+    - paragraph [ref=e38]: The shell already handles button state, legend orchestration, and panel routing. Layer data and analysis will slot into this same control surface.
+    - generic [ref=e39]:
+      - button "Crime Heatmap deck.gl heatmap · cached by month" [ref=e40] [cursor=pointer]:
+        - generic [ref=e42]:
+          - generic [ref=e43]: Crime Heatmap
+          - generic [ref=e44]: deck.gl heatmap · cached by month
+      - button "Air Quality DAQI markers · Liverpool monitoring stations" [ref=e46] [cursor=pointer]:
+        - generic [ref=e48]:
+          - generic [ref=e49]: Air Quality
+          - generic [ref=e50]: DAQI markers · Liverpool monitoring stations
+      - button "Business Density deck.gl hexagons · Overpass commercial POIs" [ref=e52] [cursor=pointer]:
+        - generic [ref=e54]:
+          - generic [ref=e55]: Business Density
+          - generic [ref=e56]: deck.gl hexagons · Overpass commercial POIs
+      - button "Deprivation Index MapLibre fill layer · IMD 2019 choropleth" [ref=e58] [cursor=pointer]:
+        - generic [ref=e60]:
+          - generic [ref=e61]: Deprivation Index
+          - generic [ref=e62]: MapLibre fill layer · IMD 2019 choropleth
+      - button "Transport Nodes Static stations + interchanges · click popups" [ref=e64] [cursor=pointer]:
+        - generic [ref=e66]:
+          - generic [ref=e67]: Transport Nodes
+          - generic [ref=e68]: Static stations + interchanges · click popups
+      - button "Planning Applications Recent planning applications · status filters" [ref=e70] [cursor=pointer]:
+        - generic [ref=e72]:
+          - generic [ref=e73]: Planning Applications
+          - generic [ref=e74]: Recent planning applications · status filters
+      - button "Flood Risk Flood zones · Mersey frontage risk view" [ref=e76] [cursor=pointer]:
+        - generic [ref=e78]:
+          - generic [ref=e79]: Flood Risk
+          - generic [ref=e80]: Flood zones · Mersey frontage risk view
+    - generic [ref=e82]:
+      - generic [ref=e83]: 0 layers active
+      - generic [ref=e84]: No selection
+      - generic [ref=e85]: Search ready
+  - button "⟶ Hide panel" [expanded] [ref=e86] [cursor=pointer]:
+    - generic [ref=e87]: ⟶
+    - generic [ref=e88]: Hide panel
+  - complementary "Intel panel" [ref=e89]:
+    - generic [ref=e90]:
+      - generic [ref=e91]:
+        - paragraph [ref=e92]: Panel
+        - heading "Area context" [level=2] [ref=e93]
+        - paragraph [ref=e94]: Overview, current selections, and shell-level interaction state.
+      - button "Close panel" [ref=e95] [cursor=pointer]: ×
+    - tablist "Panel tabs" [ref=e96]:
+      - tab "Overview" [selected] [ref=e97] [cursor=pointer]
+      - tab "Data" [ref=e98] [cursor=pointer]
+      - tab "About" [ref=e99] [cursor=pointer]
+    - generic [ref=e101]:
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e104]: Active layers
+          - generic [ref=e105]: "0"
+          - generic [ref=e106]: Seven layer slots are wired into the shell and can be toggled repeatedly without duplicate UI state.
+        - generic [ref=e107]:
+          - generic [ref=e108]: Panel focus
+          - generic [ref=e109]: System
+          - generic [ref=e110]: No active layer selected. Map interactions drive the current context.
+      - generic [ref=e111]:
+        - heading "Map click routing is live" [level=3] [ref=e112]
+        - paragraph [ref=e113]: Click anywhere on the map to capture a location context. The shell already stores the coordinate, measures distance from Liverpool core with Turf.js, and uses the same panel surface future layers will target.
+      - generic [ref=e114]:
+        - heading "Layer activity mix" [level=3] [ref=e115]
+        - paragraph [ref=e116]: "The chart below is intentionally simple: it proves Chart.js lifecycle handling in the single-file shell before the richer deprivation, air, and crime analytics land here."
+        - generic "Layer activity chart" [ref=e117]
+      - generic [ref=e118]:
+        - heading "Visible intelligence stack" [level=3] [ref=e119]
+        - paragraph [ref=e120]: The active list below reflects the same layer registry driving the buttons and legend.
+        - generic [ref=e121]:
+          - heading "No layers active" [level=3] [ref=e122]
+          - paragraph [ref=e123]: The shell is fully interactive even before data loads. Use the left control stack to stage visible symbology, inspect legend behavior, and route panel focus.
+  - region "Legend" [ref=e124]:
+    - paragraph [ref=e125]: Legend
+    - heading "Visible symbology" [level=2] [ref=e126]
+    - paragraph [ref=e127]: Activate a layer to inspect the exact colour ramp or symbol set it will bring onto the map.
+    - generic [ref=e129]: The shell keeps the legend empty until a layer is visible, so the legend always reflects what is actually on screen.
+  - contentinfo [ref=e130]:
+    - generic [ref=e131]:
+      - strong [ref=e132]: "Sources:"
+      - text: CartoDB dark_all, data.police.uk, DEFRA AURN, ONS IMD, Overpass, Liverpool Open Data, Environment Agency.
+    - generic [ref=e133]:
+      - strong [ref=e134]: "Version:"
+      - text: v0.1.0-shell
