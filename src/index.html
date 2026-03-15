@@ -1758,12 +1758,11 @@
         short: 'Planning',
         color: '#f3f4f6',
         meta: 'Recent planning applications · status filters',
-        detail: 'Pending, approved, refused, and withdrawn planning points.',
+        detail: 'Pending, approved, and refused planning application points.',
         legends: [
           { type: 'chip', label: 'Pending', color: '#ffd700' },
           { type: 'chip', label: 'Approved', color: '#22c55e' },
-          { type: 'chip', label: 'Refused', color: '#ff3b3b' },
-          { type: 'chip', label: 'Withdrawn', color: '#6b7280' }
+          { type: 'chip', label: 'Refused', color: '#ff3b3b' }
         ]
       },
       flood: {
@@ -1773,8 +1772,8 @@
         meta: 'Flood zones · Mersey frontage risk view',
         detail: 'Flood Zone 2 and Flood Zone 3 overlays for resilience planning.',
         legends: [
-          { type: 'chip', label: 'Flood Zone 2', color: 'rgba(59,130,246,0.55)' },
-          { type: 'chip', label: 'Flood Zone 3', color: 'rgba(255,59,59,0.68)' }
+          { type: 'chip', label: 'Flood Zone 2', color: 'rgba(59,130,246,0.25)' },
+          { type: 'chip', label: 'Flood Zone 3', color: 'rgba(255,59,59,0.35)' }
         ]
       }
     };
@@ -2442,7 +2441,10 @@
       if (!appState.map || !event?.point) return false;
       const interactiveLayers = [
         typeof DEPRIVATION_CONFIG !== 'undefined' ? DEPRIVATION_CONFIG.layerId : null,
-        typeof TRANSPORT_CONFIG !== 'undefined' ? TRANSPORT_CONFIG.layerId : null
+        typeof TRANSPORT_CONFIG !== 'undefined' ? TRANSPORT_CONFIG.layerId : null,
+        typeof PLANNING_CONFIG !== 'undefined' ? PLANNING_CONFIG.layerId : null,
+        typeof FLOOD_CONFIG !== 'undefined' ? FLOOD_CONFIG.zone2LayerId : null,
+        typeof FLOOD_CONFIG !== 'undefined' ? FLOOD_CONFIG.zone3LayerId : null
       ].filter((layerId) => layerId && appState.map.getLayer(layerId));
       if (!interactiveLayers.length) return false;
       return appState.map.queryRenderedFeatures(event.point, { layers: interactiveLayers }).length > 0;
@@ -4328,11 +4330,51 @@
       ]
     };
 
+    const PLANNING_CONFIG = {
+      sourceId: 'planning-applications',
+      layerId: 'planning-application-circles'
+    };
+
+    const PLANNING_APPS = [
+      { ref: '24P/2847', address: '42 Bold Street', proposal: 'Change of use from retail to restaurant', status: 'Approved', date: '2024-10-15', coords: [-2.9735, 53.4051] },
+      { ref: '24P/3102', address: 'Liverpool ONE, South John Street', proposal: 'Extension of outdoor dining area', status: 'Pending', date: '2024-11-20', coords: [-2.9879, 53.4023] },
+      { ref: '24P/2654', address: '8 Hope Street', proposal: 'Conversion to 12 residential apartments', status: 'Approved', date: '2024-09-30', coords: [-2.9690, 53.4039] },
+      { ref: '24P/3298', address: 'Stanley Dock, Regent Road', proposal: 'Mixed-use redevelopment of warehouse', status: 'Pending', date: '2024-12-01', coords: [-2.9923, 53.4180] },
+      { ref: '24P/2901', address: 'Aigburth Road', proposal: 'New build 6 semi-detached houses', status: 'Refused', date: '2024-10-28', coords: [-2.9418, 53.3729] },
+      { ref: '24P/3450', address: 'Edge Lane Retail Park', proposal: 'Drive-through restaurant with parking', status: 'Pending', date: '2024-12-10', coords: [-2.9177, 53.4061] }
+    ];
+
+    const FLOOD_CONFIG = {
+      sourceId: 'flood-zones',
+      zone2LayerId: 'flood-zone-2-fill',
+      zone3LayerId: 'flood-zone-3-fill',
+      outlineLayerId: 'flood-zone-outline'
+    };
+
+    const FLOOD_ZONES = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { zone: 3, label: 'High Risk' }, geometry: { type: 'Polygon', coordinates: [[[-2.995,53.388],[-2.975,53.388],[-2.975,53.395],[-2.995,53.395],[-2.995,53.388]]] }},
+        { type: 'Feature', properties: { zone: 2, label: 'Medium Risk' }, geometry: { type: 'Polygon', coordinates: [[[-3.01,53.385],[-2.96,53.385],[-2.96,53.398],[-3.01,53.398],[-3.01,53.385]]] }}
+      ]
+    };
+
     const businessState = {
       pois: [],
       selectedHex: null,
       source: null,
       sourceLabel: ''
+    };
+
+    const planningState = {
+      apps: PLANNING_APPS.map((app) => ({ ...app })),
+      selectedRef: null,
+      handlersBound: false
+    };
+
+    const floodState = {
+      selectedZone: null,
+      handlersBound: false
     };
 
     const transportState = {
@@ -5374,53 +5416,528 @@
       }
     });
 
-    LayerRegistry.register('planning', {
-      load() {
-        appState.loadingLayers.planning = true;
+    function getPlanningGeoJson() {
+      return {
+        type: 'FeatureCollection',
+        features: planningState.apps.map((app) => ({
+          type: 'Feature',
+          properties: {
+            ref: app.ref,
+            address: app.address,
+            proposal: app.proposal,
+            status: app.status,
+            date: app.date,
+            selected: app.ref === planningState.selectedRef
+          },
+          geometry: {
+            type: 'Point',
+            coordinates: app.coords
+          }
+        }))
+      };
+    }
+
+    function getPlanningApp(ref) {
+      return planningState.apps.find((app) => app.ref === ref) || null;
+    }
+
+    function formatPlanningDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return new Intl.DateTimeFormat([], { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
+    }
+
+    function getPlanningStatusCounts() {
+      return planningState.apps.reduce((acc, app) => {
+        acc[app.status] = (acc[app.status] || 0) + 1;
+        return acc;
+      }, {});
+    }
+
+    function removePlanningMapLayer() {
+      if (!appState.map) return;
+      const map = appState.map;
+      if (planningState.handlersBound) {
+        map.off('click', PLANNING_CONFIG.layerId, handlePlanningLayerClick);
+        map.off('mouseenter', PLANNING_CONFIG.layerId, handlePlanningLayerMouseEnter);
+        map.off('mouseleave', PLANNING_CONFIG.layerId, handlePlanningLayerMouseLeave);
+        planningState.handlersBound = false;
+      }
+      if (map.getLayer(PLANNING_CONFIG.layerId)) {
+        map.removeLayer(PLANNING_CONFIG.layerId);
+      }
+      if (map.getSource(PLANNING_CONFIG.sourceId)) {
+        map.removeSource(PLANNING_CONFIG.sourceId);
+      }
+    }
+
+    function syncPlanningSelection() {
+      if (!appState.map || !appState.map.getSource(PLANNING_CONFIG.sourceId)) return;
+      appState.map.getSource(PLANNING_CONFIG.sourceId).setData(getPlanningGeoJson());
+    }
+
+    function openPlanningPopup(app, lngLat = app.coords) {
+      if (!appState.map || !app) return;
+      removeLayerPopups('planning');
+      const popup = new maplibregl.Popup({ offset: 18 })
+        .setLngLat(lngLat)
+        .setHTML(`
+          <div class="map-popup">
+            <h3>${escapeHtml(app.ref)}</h3>
+            <p><strong>Address:</strong> ${escapeHtml(app.address)}<br /><strong>Proposal:</strong> ${escapeHtml(app.proposal)}<br /><strong>Status:</strong> ${escapeHtml(app.status)}<br /><strong>Date:</strong> ${escapeHtml(formatPlanningDate(app.date))}</p>
+          </div>
+        `)
+        .addTo(appState.map);
+      addLayerPopup('planning', popup);
+    }
+
+    function focusPlanningApp(ref, options = {}) {
+      const app = getPlanningApp(ref);
+      if (!app) return;
+      planningState.selectedRef = app.ref;
+      appState.selection = {
+        type: 'planning-app',
+        label: `Planning · ${app.ref}`,
+        description: `${app.status} · ${app.address}`,
+        coordinates: app.coords
+      };
+      appState.panel.activeDetail = 'planning-app';
+      setPanelOpen(true, { silentRender: true });
+      syncPlanningSelection();
+      renderLayerSummary();
+      renderPanel();
+      if (options.flyTo && appState.map) {
+        appState.map.flyTo({ center: app.coords, zoom: Math.max(appState.map.getZoom(), 13.4), essential: true, speed: 0.7 });
+      }
+      if (options.popup) {
+        openPlanningPopup(app, options.popupLngLat || app.coords);
+      }
+      if (!options.silentTimestamp) {
+        updateLastUpdated(`Planning application selected: ${app.ref}`);
+      }
+    }
+
+    function handlePlanningLayerClick(event) {
+      const feature = event.features?.[0];
+      const ref = feature?.properties?.ref;
+      if (!ref) return;
+      focusPlanningApp(ref, { flyTo: true, popup: true, popupLngLat: event.lngLat, silentTimestamp: true });
+    }
+
+    function handlePlanningLayerMouseEnter() {
+      if (appState.map) {
+        appState.map.getCanvas().style.cursor = 'pointer';
+      }
+    }
+
+    function handlePlanningLayerMouseLeave() {
+      if (appState.map) {
+        appState.map.getCanvas().style.cursor = '';
+      }
+    }
+
+    function renderPlanningLayer() {
+      if (!appState.map || !planningState.apps.length) return;
+      const map = appState.map;
+      const data = getPlanningGeoJson();
+      if (!map.getSource(PLANNING_CONFIG.sourceId)) {
+        map.addSource(PLANNING_CONFIG.sourceId, { type: 'geojson', data });
+      } else {
+        map.getSource(PLANNING_CONFIG.sourceId).setData(data);
+      }
+      if (!map.getLayer(PLANNING_CONFIG.layerId)) {
+        map.addLayer({
+          id: PLANNING_CONFIG.layerId,
+          type: 'circle',
+          source: PLANNING_CONFIG.sourceId,
+          paint: {
+            'circle-color': ['match', ['get', 'status'], 'Pending', '#ffd700', 'Approved', '#22c55e', 'Refused', '#ff3b3b', '#9ca3af'],
+            'circle-radius': 8,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': ['case', ['boolean', ['get', 'selected'], false], 3, 2],
+            'circle-opacity': ['case', ['boolean', ['get', 'selected'], false], 1, 0.95]
+          }
+        });
+      }
+      if (!planningState.handlersBound) {
+        map.on('click', PLANNING_CONFIG.layerId, handlePlanningLayerClick);
+        map.on('mouseenter', PLANNING_CONFIG.layerId, handlePlanningLayerMouseEnter);
+        map.on('mouseleave', PLANNING_CONFIG.layerId, handlePlanningLayerMouseLeave);
+        planningState.handlersBound = true;
+      }
+      syncPlanningSelection();
+    }
+
+    async function loadPlanningLayer() {
+      appState.loadingLayers.planning = true;
+      renderLayerButtons();
+      updateLastUpdated('Planning applications: loading static sample set...');
+      try {
+        if (!appState.map || !appState.map.isStyleLoaded()) {
+          appState.map?.once('load', () => {
+            if (appState.activeLayers.planning) loadPlanningLayer();
+          });
+          return;
+        }
+        appState.layerErrors.planning = null;
+        planningState.apps = PLANNING_APPS.map((app) => ({ ...app }));
+        if (!planningState.selectedRef && planningState.apps[0]) {
+          planningState.selectedRef = planningState.apps[0].ref;
+        }
+        renderPlanningLayer();
+        appState.panel.activeDetail = 'planning';
+        appState.selection = {
+          type: 'planning-layer',
+          label: 'Planning Applications',
+          description: `${planningState.apps.length} sample applications loaded across Liverpool.`
+        };
+        clearBanner();
         renderLayerButtons();
-        updateLastUpdated('Planning: pending data implementation');
-        setTimeout(() => {
-          appState.loadingLayers.planning = false;
-          renderLayerButtons();
-          updateLastUpdated('Planning layer armed (data pending)');
-        }, 600);
-      },
-      render() {},
-      hide() {
-        removeLayerPopups('planning');
-        updateDeckOverlay();
-      },
+        renderLayerSummary();
+        renderLegend();
+        renderPanel();
+        updateLastUpdated('Planning applications active · static sample set');
+      } catch (error) {
+        planningState.apps = [];
+        appState.layerErrors.planning = { message: error.message, error };
+        appState.activeLayers.planning = false;
+        setBanner({ title: 'Planning applications unavailable', message: error.message || 'Planning applications could not be prepared.' });
+      } finally {
+        appState.loadingLayers.planning = false;
+        renderLayerButtons();
+      }
+    }
+
+    function hidePlanningLayer() {
+      removePlanningMapLayer();
+      removeLayerPopups('planning');
+      planningState.selectedRef = null;
+      if (appState.selection?.type === 'planning-app' || appState.selection?.type === 'planning-layer') {
+        appState.selection = null;
+      }
+    }
+
+    function getPlanningButtonState() {
+      const counts = getPlanningStatusCounts();
+      return {
+        label: `⚪ Planning (${planningState.apps.length} apps)`,
+        meta: `${counts.Pending || 0} pending · ${counts.Approved || 0} approved · ${counts.Refused || 0} refused`
+      };
+    }
+
+    function renderPlanningPanelContent(tab) {
+      const selectedApp = getPlanningApp(planningState.selectedRef);
+      const counts = getPlanningStatusCounts();
+      if (tab === 'data') {
+        return `
+          <div class="stack">
+            <div class="info-card">
+              <h3>Planning application feed</h3>
+              <table class="data-table">
+                <thead>
+                  <tr><th>Ref</th><th>Status</th><th>Date</th><th>Address</th></tr>
+                </thead>
+                <tbody>
+                  ${planningState.apps.map((app) => `
+                    <tr>
+                      <td>${escapeHtml(app.ref)}</td>
+                      <td>${escapeHtml(app.status)}</td>
+                      <td>${escapeHtml(formatPlanningDate(app.date))}</td>
+                      <td>${escapeHtml(app.address)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="stack">
+          <div class="metric-grid">
+            <div class="metric-card"><span class="metric-label">Applications</span><span class="metric-value">${planningState.apps.length}</span><span class="metric-note">Static sample planning records embedded in the app shell.</span></div>
+            <div class="metric-card"><span class="metric-label">Pending</span><span class="metric-value">${counts.Pending || 0}</span><span class="metric-note">Approved ${counts.Approved || 0} · Refused ${counts.Refused || 0}</span></div>
+          </div>
+          ${selectedApp ? `
+            <div class="info-card">
+              <h3>${escapeHtml(selectedApp.ref)}</h3>
+              <p><strong>${escapeHtml(selectedApp.address)}</strong><br />${escapeHtml(selectedApp.proposal)}</p>
+              <ul class="detail-list">
+                <li><strong>Status</strong>${escapeHtml(selectedApp.status)}</li>
+                <li><strong>Date</strong>${escapeHtml(formatPlanningDate(selectedApp.date))}</li>
+              </ul>
+            </div>
+          ` : ''}
+          <div class="info-card">
+            <h3>Layer note</h3>
+            <p>${escapeHtml(LAYER_DEFINITIONS.planning.detail)} Click a point on the map to inspect the application popup and route its detail into the side panel.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    function getFloodZoneDescription(zone) {
+      if (Number(zone) === 3) {
+        return 'High probability river flooding area requiring the strongest resilience controls and planning caution.';
+      }
+      return 'Medium probability river flooding area where resilient design and safe access should be planned in early.';
+    }
+
+    function getFloodZoneFeature(zone) {
+      return FLOOD_ZONES.features.find((feature) => Number(feature.properties?.zone) === Number(zone)) || null;
+    }
+
+    function removeFloodMapLayer() {
+      if (!appState.map) return;
+      const map = appState.map;
+      if (floodState.handlersBound) {
+        [FLOOD_CONFIG.zone2LayerId, FLOOD_CONFIG.zone3LayerId].forEach((layerId) => {
+          map.off('click', layerId, handleFloodLayerClick);
+          map.off('mouseenter', layerId, handleFloodLayerMouseEnter);
+          map.off('mouseleave', layerId, handleFloodLayerMouseLeave);
+        });
+        floodState.handlersBound = false;
+      }
+      [FLOOD_CONFIG.outlineLayerId, FLOOD_CONFIG.zone3LayerId, FLOOD_CONFIG.zone2LayerId].forEach((layerId) => {
+        if (map.getLayer(layerId)) {
+          map.removeLayer(layerId);
+        }
+      });
+      if (map.getSource(FLOOD_CONFIG.sourceId)) {
+        map.removeSource(FLOOD_CONFIG.sourceId);
+      }
+    }
+
+    function openFloodPopup(feature, lngLat) {
+      if (!appState.map || !feature) return;
+      const zone = Number(feature.properties?.zone || 0);
+      removeLayerPopups('flood');
+      const popup = new maplibregl.Popup({ offset: 18 })
+        .setLngLat(lngLat)
+        .setHTML(`
+          <div class="map-popup">
+            <h3>Flood Zone ${zone}</h3>
+            <p><strong>Type:</strong> ${escapeHtml(feature.properties?.label || 'Flood zone')}<br /><strong>Risk:</strong> ${escapeHtml(getFloodZoneDescription(zone))}</p>
+          </div>
+        `)
+        .addTo(appState.map);
+      addLayerPopup('flood', popup);
+    }
+
+    function focusFloodZone(zone, options = {}) {
+      const feature = getFloodZoneFeature(zone);
+      if (!feature) return;
+      floodState.selectedZone = Number(zone);
+      appState.selection = {
+        type: 'flood-zone',
+        label: `Flood Zone ${zone}`,
+        description: getFloodZoneDescription(zone)
+      };
+      appState.panel.activeDetail = 'flood-zone';
+      setPanelOpen(true, { silentRender: true });
+      renderLayerSummary();
+      renderPanel();
+      if (options.popup) {
+        openFloodPopup(feature, options.popupLngLat);
+      }
+      if (!options.silentTimestamp) {
+        updateLastUpdated(`Flood zone selected: Zone ${zone}`);
+      }
+    }
+
+    function handleFloodLayerClick(event) {
+      const feature = appState.map?.queryRenderedFeatures(event.point, { layers: [FLOOD_CONFIG.zone3LayerId, FLOOD_CONFIG.zone2LayerId] })?.[0] || event.features?.[0];
+      const zone = feature?.properties?.zone;
+      if (!zone) return;
+      focusFloodZone(zone, { popup: true, popupLngLat: event.lngLat, silentTimestamp: true });
+    }
+
+    function handleFloodLayerMouseEnter() {
+      if (appState.map) {
+        appState.map.getCanvas().style.cursor = 'pointer';
+      }
+    }
+
+    function handleFloodLayerMouseLeave() {
+      if (appState.map) {
+        appState.map.getCanvas().style.cursor = '';
+      }
+    }
+
+    function renderFloodLayer() {
+      if (!appState.map) return;
+      const map = appState.map;
+      if (!map.getSource(FLOOD_CONFIG.sourceId)) {
+        map.addSource(FLOOD_CONFIG.sourceId, { type: 'geojson', data: FLOOD_ZONES });
+      } else {
+        map.getSource(FLOOD_CONFIG.sourceId).setData(FLOOD_ZONES);
+      }
+      if (!map.getLayer(FLOOD_CONFIG.zone2LayerId)) {
+        map.addLayer({
+          id: FLOOD_CONFIG.zone2LayerId,
+          type: 'fill',
+          source: FLOOD_CONFIG.sourceId,
+          filter: ['==', ['get', 'zone'], 2],
+          paint: {
+            'fill-color': 'rgba(59,130,246,0.25)'
+          }
+        });
+      }
+      if (!map.getLayer(FLOOD_CONFIG.zone3LayerId)) {
+        map.addLayer({
+          id: FLOOD_CONFIG.zone3LayerId,
+          type: 'fill',
+          source: FLOOD_CONFIG.sourceId,
+          filter: ['==', ['get', 'zone'], 3],
+          paint: {
+            'fill-color': 'rgba(255,59,59,0.35)'
+          }
+        });
+      }
+      if (!map.getLayer(FLOOD_CONFIG.outlineLayerId)) {
+        map.addLayer({
+          id: FLOOD_CONFIG.outlineLayerId,
+          type: 'line',
+          source: FLOOD_CONFIG.sourceId,
+          paint: {
+            'line-color': 'rgba(255,255,255,0.45)',
+            'line-width': 1.25
+          }
+        });
+      }
+      if (!floodState.handlersBound) {
+        [FLOOD_CONFIG.zone2LayerId, FLOOD_CONFIG.zone3LayerId].forEach((layerId) => {
+          map.on('click', layerId, handleFloodLayerClick);
+          map.on('mouseenter', layerId, handleFloodLayerMouseEnter);
+          map.on('mouseleave', layerId, handleFloodLayerMouseLeave);
+        });
+        floodState.handlersBound = true;
+      }
+    }
+
+    async function loadFloodLayer() {
+      appState.loadingLayers.flood = true;
+      renderLayerButtons();
+      updateLastUpdated('Flood risk: loading Mersey zones...');
+      try {
+        if (!appState.map || !appState.map.isStyleLoaded()) {
+          appState.map?.once('load', () => {
+            if (appState.activeLayers.flood) loadFloodLayer();
+          });
+          return;
+        }
+        appState.layerErrors.flood = null;
+        renderFloodLayer();
+        appState.panel.activeDetail = 'flood';
+        appState.selection = {
+          type: 'flood-layer',
+          label: 'Flood Risk',
+          description: `${FLOOD_ZONES.features.length} static Mersey flood zones loaded.`
+        };
+        clearBanner();
+        renderLayerButtons();
+        renderLayerSummary();
+        renderLegend();
+        renderPanel();
+        updateLastUpdated('Flood risk active · static Mersey zones');
+      } catch (error) {
+        appState.layerErrors.flood = { message: error.message, error };
+        appState.activeLayers.flood = false;
+        setBanner({ title: 'Flood risk unavailable', message: error.message || 'Flood zones could not be prepared.' });
+      } finally {
+        appState.loadingLayers.flood = false;
+        renderLayerButtons();
+      }
+    }
+
+    function hideFloodLayer() {
+      removeFloodMapLayer();
+      removeLayerPopups('flood');
+      floodState.selectedZone = null;
+      if (appState.selection?.type === 'flood-zone' || appState.selection?.type === 'flood-layer') {
+        appState.selection = null;
+      }
+    }
+
+    function getFloodButtonState() {
+      return {
+        label: `🌊 Flood Risk (${FLOOD_ZONES.features.length} zones)`,
+        meta: 'Zone 3 high risk · Zone 2 medium risk'
+      };
+    }
+
+    function renderFloodPanelContent(tab) {
+      const selectedFeature = getFloodZoneFeature(floodState.selectedZone);
+      if (tab === 'data') {
+        return `
+          <div class="stack">
+            <div class="info-card">
+              <h3>Flood zone schedule</h3>
+              <table class="data-table">
+                <thead>
+                  <tr><th>Zone</th><th>Type</th><th>Risk description</th></tr>
+                </thead>
+                <tbody>
+                  ${FLOOD_ZONES.features.map((feature) => `
+                    <tr>
+                      <td>${escapeHtml(`Zone ${feature.properties.zone}`)}</td>
+                      <td>${escapeHtml(feature.properties.label)}</td>
+                      <td>${escapeHtml(getFloodZoneDescription(feature.properties.zone))}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="stack">
+          <div class="metric-grid">
+            <div class="metric-card"><span class="metric-label">Flood zones</span><span class="metric-value">${FLOOD_ZONES.features.length}</span><span class="metric-note">Simplified Mersey frontage polygons embedded directly in the prototype.</span></div>
+            <div class="metric-card"><span class="metric-label">Highest risk</span><span class="metric-value">Zone 3</span><span class="metric-note">Zone 2 remains visible as the wider medium-risk envelope.</span></div>
+          </div>
+          ${selectedFeature ? `
+            <div class="info-card">
+              <h3>Flood Zone ${escapeHtml(String(selectedFeature.properties.zone))}</h3>
+              <p><strong>${escapeHtml(selectedFeature.properties.label)}</strong><br />${escapeHtml(getFloodZoneDescription(selectedFeature.properties.zone))}</p>
+            </div>
+          ` : ''}
+          <div class="info-card">
+            <h3>Layer note</h3>
+            <p>${escapeHtml(LAYER_DEFINITIONS.flood.detail)} Click a polygon to inspect the zone type and planning-risk description in a popup.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    LayerRegistry.register('planning', {
+      load: loadPlanningLayer,
+      render: renderPlanningLayer,
+      hide: hidePlanningLayer,
       destroyPanelArtifacts() { destroyLayerCharts('planning'); },
       getLegendItems() { return LAYER_DEFINITIONS.planning.legends; },
+      getButtonState: getPlanningButtonState,
       getPanelContent(tab) {
-        if (appState.panel.activeDetail !== 'planning') return null;
-        if (tab === 'about') return null;
-        return `<div class="stack"><div class="info-card"><h3>Planning Applications</h3><p>${LAYER_DEFINITIONS.planning.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+        const isPlanningDetail = appState.panel.activeDetail === 'planning' || appState.panel.activeDetail === 'planning-app';
+        if (!isPlanningDetail || !appState.activeLayers.planning) return null;
+        if (tab === 'overview' || tab === 'data') return renderPlanningPanelContent(tab);
+        return null;
       }
     });
 
     LayerRegistry.register('flood', {
-      load() {
-        appState.loadingLayers.flood = true;
-        renderLayerButtons();
-        updateLastUpdated('Flood: pending data implementation');
-        setTimeout(() => {
-          appState.loadingLayers.flood = false;
-          renderLayerButtons();
-          updateLastUpdated('Flood layer armed (data pending)');
-        }, 600);
-      },
-      render() {},
-      hide() {
-        removeLayerPopups('flood');
-        updateDeckOverlay();
-      },
+      load: loadFloodLayer,
+      render: renderFloodLayer,
+      hide: hideFloodLayer,
       destroyPanelArtifacts() { destroyLayerCharts('flood'); },
       getLegendItems() { return LAYER_DEFINITIONS.flood.legends; },
+      getButtonState: getFloodButtonState,
       getPanelContent(tab) {
-        if (appState.panel.activeDetail !== 'flood') return null;
-        if (tab === 'about') return null;
-        return `<div class="stack"><div class="info-card"><h3>Flood Risk</h3><p>${LAYER_DEFINITIONS.flood.detail} Data implementation pending - the layer contract, toggle lifecycle, legend composition, and panel routing are live.</p></div></div>`;
+        const isFloodDetail = appState.panel.activeDetail === 'flood' || appState.panel.activeDetail === 'flood-zone';
+        if (!isFloodDetail || !appState.activeLayers.flood) return null;
+        if (tab === 'overview' || tab === 'data') return renderFloodPanelContent(tab);
+        return null;
       }
     });
   </script>
