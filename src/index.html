@@ -1543,20 +1543,49 @@
 
     @media (max-width: 767px) {
       :root {
-        --topbar-height: 144px;
+        --topbar-height: 60px;
       }
 
       .topbar {
-        padding: 14px;
-        border-radius: 22px;
+        padding: 10px 14px;
+        border-radius: 16px;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .brand-subtitle, .status-cluster, .metric-grid {
+        display: none;
       }
 
       .brand-row {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
       }
 
       .search-form {
+        flex-wrap: nowrap;
+      }
+
+      .search-button {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .search-form input {
+        font-size: 13px;
+        padding: 6px 10px;
+      }
+
+      .layer-panel {
+        top: calc(16px + var(--topbar-height) + 12px);
+        width: calc(100vw - 32px);
+        flex-direction: row;
         flex-wrap: wrap;
+        gap: 4px;
+      }
+
+      .layer-btn {
+        font-size: 11px;
+        padding: 4px 8px;
       }
 
       .search-icon {
@@ -1644,12 +1673,12 @@
       <div class="layer-summary" id="layer-summary-pills"></div>
     </aside>
 
-    <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true" aria-controls="side-panel">
+    <button id="panel-toggle" class="panel-toggle closed" type="button" aria-expanded="false" aria-controls="side-panel">
       <span id="panel-toggle-icon">⟶</span>
       <span id="panel-toggle-label">Hide panel</span>
     </button>
 
-    <aside id="side-panel" class="glass-card side-panel" aria-label="Intel panel">
+    <aside id="side-panel" class="glass-card side-panel closed" aria-label="Intel panel">
       <div class="panel-handle" aria-hidden="true"></div>
       <div class="side-panel-header">
         <div>
