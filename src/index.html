@@ -894,54 +894,40 @@
     .air-marker {
       --marker-color: var(--accent-green);
       position: relative;
-      width: 30px;
-      height: 30px;
+      width: 24px;
+      height: 24px;
       border-radius: 999px;
-      display: grid;
-      place-items: center;
-      border: 2px solid rgba(255, 255, 255, 0.88);
-      background: rgba(10, 12, 15, 0.82);
-      color: var(--text);
-      font-size: 0.72rem;
-      font-weight: 800;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-      transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
-      cursor: pointer;
+      pointer-events: none;
       user-select: none;
+      transform-origin: center;
     }
 
     .air-marker::before,
     .air-marker::after {
       content: '';
       position: absolute;
-      inset: 0;
       border-radius: 999px;
     }
 
     .air-marker::before {
-      background: radial-gradient(circle, color-mix(in srgb, var(--marker-color) 84%, white 16%) 0%, var(--marker-color) 100%);
-      box-shadow: 0 0 0 10px color-mix(in srgb, var(--marker-color) 16%, transparent 84%);
-      z-index: 0;
+      inset: 0;
+      background: color-mix(in srgb, var(--marker-color) 32%, transparent 68%);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--marker-color) 12%, transparent 88%);
+      opacity: 0.9;
     }
 
     .air-marker::after {
-      inset: -8px;
-      border: 2px solid color-mix(in srgb, var(--marker-color) 42%, transparent 58%);
-      opacity: 0.85;
+      inset: -6px;
+      border: 2px solid color-mix(in srgb, var(--marker-color) 52%, transparent 48%);
+      opacity: 0.82;
       animation: airMarkerPulse 1.8s ease-out infinite;
     }
 
-    .air-marker span {
-      position: relative;
-      z-index: 1;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-    }
-
-    .air-marker:hover,
-    .air-marker.selected {
-      transform: scale(1.08);
-      border-color: #ffffff;
-      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12), 0 16px 34px rgba(0, 0, 0, 0.42);
+    .air-marker.selected::after {
+      inset: -8px;
+      border-color: color-mix(in srgb, var(--marker-color) 70%, white 30%);
+      animation-duration: 1.3s;
+      opacity: 1;
     }
 
     .air-panel-grid {
@@ -3764,42 +3750,26 @@
 
     // ===== AIR QUALITY LAYER (P1) =====
     const AIR_CONFIG = {
-      cacheKey: 'air_quality_latest',
-      ttlMs: 3600000
+      cacheKey: 'air_quality_static_v2',
+      ttlMs: 3600000,
+      sourceId: 'air-quality-source',
+      layerId: 'air-quality-circles',
+      labelLayerId: 'air-quality-labels'
     };
 
-    const AIR_FALLBACK_STATIONS = [
-      {
-        id: 'liverpool-centre',
-        code: 'LIN3',
-        name: 'Liverpool Centre',
-        coordinates: [-2.969, 53.404],
-        daqi: 4,
-        updated: '2026-03-15T13:00:00Z',
-        pollutants: { pm25: 12.4, pm10: 19.8, no2: 31.2, o3: 48.1 },
-        history: [3, 3, 3, 4, 4, 4, 5, 4, 4, 4, 4, 4]
-      },
-      {
-        id: 'liverpool-speke',
-        code: 'SPKE',
-        name: 'Liverpool Speke',
-        coordinates: [-2.85, 53.352],
-        daqi: 3,
-        updated: '2026-03-15T13:00:00Z',
-        pollutants: { pm25: 8.6, pm10: 14.2, no2: 22.7, o3: 54.4 },
-        history: [2, 2, 3, 2, 3, 3, 3, 3, 2, 3, 3, 3]
-      },
-      {
-        id: 'wirral-tranmere',
-        code: 'WTRL',
-        name: 'Wirral Tranmere',
-        coordinates: [-3.009, 53.38],
-        daqi: 5,
-        updated: '2026-03-15T13:00:00Z',
-        pollutants: { pm25: 14.1, pm10: 23.9, no2: 37.4, o3: 41.6 },
-        history: [4, 4, 5, 4, 5, 5, 5, 6, 5, 5, 5, 5]
-      }
+    const AIR_STATIONS = [
+      { name: 'Liverpool Centre', coords: [-2.969, 53.404], daqi: 3, pm25: 8, pm10: 14, no2: 22, label: 'Low' },
+      { name: 'Liverpool Speke', coords: [-2.850, 53.352], daqi: 2, pm25: 6, pm10: 11, no2: 18, label: 'Low' },
+      { name: 'Wirral Tranmere', coords: [-3.009, 53.380], daqi: 4, pm25: 12, pm10: 19, no2: 28, label: 'Moderate' }
     ];
+
+    const AIR_STATION_CODES = {
+      'Liverpool Centre': 'LIN3',
+      'Liverpool Speke': 'SPKE',
+      'Wirral Tranmere': 'WTRL'
+    };
+
+    const AIR_UPDATED_AT = '2026-03-15T13:00:00Z';
 
     const airState = {
       stations: [],
@@ -3807,20 +3777,35 @@
       selectedStationId: null,
       source: null,
       sourceLabel: '',
-      advisory: ''
+      advisory: '',
+      handlersBound: false
     };
 
+    function buildAirStationHistory(daqi) {
+      const base = clampNumber(Number(daqi) || 1, 1, 10);
+      return [Math.max(1, base - 1), base, base, Math.min(10, base + 1), base, base];
+    }
+
     function cloneAirStations(stations) {
-      return stations.map((station) => ({
-        ...station,
-        coordinates: [...station.coordinates],
-        pollutants: { ...station.pollutants },
-        history: Array.isArray(station.history) ? [...station.history] : []
+      return stations.map((station, index) => ({
+        id: station.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        code: AIR_STATION_CODES[station.name] || `AIR${index + 1}`,
+        name: station.name,
+        label: station.label || getAirLevelLabel(station.daqi),
+        coordinates: [...station.coords],
+        daqi: station.daqi,
+        updated: AIR_UPDATED_AT,
+        pollutants: {
+          pm25: station.pm25,
+          pm10: station.pm10,
+          no2: station.no2
+        },
+        history: buildAirStationHistory(station.daqi)
       }));
     }
 
     function getAirLevelLabel(daqi) {
-      if (daqi >= 10) return 'Very high';
+      if (daqi >= 10) return 'Very High';
       if (daqi >= 7) return 'High';
       if (daqi >= 4) return 'Moderate';
       return 'Low';
@@ -3897,7 +3882,7 @@
       }
 
       const fallbackPayload = {
-        stations: cloneAirStations(AIR_FALLBACK_STATIONS),
+        stations: cloneAirStations(AIR_STATIONS),
         source: 'fallback',
         sourceLabel: 'Embedded fallback · last-known Liverpool station readings'
       };
@@ -3910,12 +3895,58 @@
       return fallbackPayload;
     }
 
+    function getAirGeoJson() {
+      return {
+        type: 'FeatureCollection',
+        features: airState.stations.map((station) => ({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: station.coordinates
+          },
+          properties: {
+            id: station.id,
+            name: station.name,
+            daqi: station.daqi,
+            label: station.label || getAirLevelLabel(station.daqi),
+            pm25: station.pollutants.pm25,
+            pm10: station.pollutants.pm10,
+            no2: station.pollutants.no2,
+            selected: station.id === airState.selectedStationId
+          }
+        }))
+      };
+    }
+
     function removeAirMarkers() {
       airState.markers.forEach((entry) => entry.marker.remove());
       airState.markers = [];
     }
 
+    function removeAirMapLayer() {
+      if (!appState.map) return;
+      const map = appState.map;
+      if (airState.handlersBound) {
+        map.off('click', AIR_CONFIG.layerId, handleAirLayerClick);
+        map.off('mouseenter', AIR_CONFIG.layerId, handleAirLayerMouseEnter);
+        map.off('mouseleave', AIR_CONFIG.layerId, handleAirLayerMouseLeave);
+        airState.handlersBound = false;
+      }
+      if (map.getLayer(AIR_CONFIG.labelLayerId)) {
+        map.removeLayer(AIR_CONFIG.labelLayerId);
+      }
+      if (map.getLayer(AIR_CONFIG.layerId)) {
+        map.removeLayer(AIR_CONFIG.layerId);
+      }
+      if (map.getSource(AIR_CONFIG.sourceId)) {
+        map.removeSource(AIR_CONFIG.sourceId);
+      }
+    }
+
     function syncAirMarkerSelection() {
+      if (appState.map && appState.map.getSource(AIR_CONFIG.sourceId)) {
+        appState.map.getSource(AIR_CONFIG.sourceId).setData(getAirGeoJson());
+      }
       airState.markers.forEach((entry) => {
         entry.element.classList.toggle('selected', entry.id === airState.selectedStationId);
       });
@@ -3929,7 +3960,7 @@
         .setHTML(`
           <div class="map-popup">
             <h3>${escapeHtml(station.name)}</h3>
-            <p><strong>DAQI:</strong> ${station.daqi} (${escapeHtml(getAirLevelLabel(station.daqi))})<br /><strong>PM2.5:</strong> ${station.pollutants.pm25.toFixed(1)} µg/m³<br /><strong>PM10:</strong> ${station.pollutants.pm10.toFixed(1)} µg/m³<br /><strong>NO₂:</strong> ${station.pollutants.no2.toFixed(1)} µg/m³<br /><strong>O₃:</strong> ${station.pollutants.o3.toFixed(1)} µg/m³<br /><strong>Updated:</strong> ${escapeHtml(formatObservationTime(station.updated))}</p>
+            <p><strong>DAQI:</strong> ${station.daqi} (${escapeHtml(getAirLevelLabel(station.daqi))})<br /><strong>PM2.5:</strong> ${station.pollutants.pm25.toFixed(1)} µg/m³<br /><strong>PM10:</strong> ${station.pollutants.pm10.toFixed(1)} µg/m³<br /><strong>NO₂:</strong> ${station.pollutants.no2.toFixed(1)} µg/m³</p>
           </div>
         `)
         .addTo(appState.map);
@@ -3951,40 +3982,100 @@
         appState.map.flyTo({ center: station.coordinates, zoom: Math.max(appState.map.getZoom(), 13.6), essential: true, speed: 0.7 });
       }
       if (options.popup) {
-        openAirPopup(station, station.coordinates);
+        openAirPopup(station, options.popupLngLat || station.coordinates);
       }
       if (!options.silentTimestamp) {
         updateLastUpdated(`Air station selected: ${station.name}`);
       }
     }
 
+    function handleAirLayerClick(event) {
+      const feature = event.features?.[0];
+      const stationId = feature?.properties?.id;
+      if (!stationId) return;
+      focusAirStation(stationId, { flyTo: true, popup: true, popupLngLat: event.lngLat, silentTimestamp: true });
+    }
+
+    function handleAirLayerMouseEnter() {
+      if (appState.map) {
+        appState.map.getCanvas().style.cursor = 'pointer';
+      }
+    }
+
+    function handleAirLayerMouseLeave() {
+      if (appState.map) {
+        appState.map.getCanvas().style.cursor = '';
+      }
+    }
+
     function renderAirLayer() {
       if (!appState.map || !airState.stations.length) return;
+      const map = appState.map;
+      const data = getAirGeoJson();
+      if (!map.getSource(AIR_CONFIG.sourceId)) {
+        map.addSource(AIR_CONFIG.sourceId, { type: 'geojson', data });
+      } else {
+        map.getSource(AIR_CONFIG.sourceId).setData(data);
+      }
+      if (!map.getLayer(AIR_CONFIG.layerId)) {
+        map.addLayer({
+          id: AIR_CONFIG.layerId,
+          type: 'circle',
+          source: AIR_CONFIG.sourceId,
+          paint: {
+            'circle-color': ['step', ['get', 'daqi'], '#22c55e', 4, '#ffd700', 7, '#ff8c00', 10, '#ff3b3b'],
+            'circle-radius': 12,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 2,
+            'circle-opacity': ['case', ['boolean', ['get', 'selected'], false], 1, 0.94]
+          }
+        });
+      }
+      if (!map.getLayer(AIR_CONFIG.labelLayerId)) {
+        map.addLayer({
+          id: AIR_CONFIG.labelLayerId,
+          type: 'symbol',
+          source: AIR_CONFIG.sourceId,
+          layout: {
+            'text-field': ['to-string', ['get', 'daqi']],
+            'text-size': 11,
+            'text-allow-overlap': true,
+            'text-ignore-placement': true
+          },
+          paint: {
+            'text-color': '#0f172a',
+            'text-halo-color': 'rgba(255,255,255,0.88)',
+            'text-halo-width': 0.8
+          }
+        });
+      }
+      if (!airState.handlersBound) {
+        map.on('click', AIR_CONFIG.layerId, handleAirLayerClick);
+        map.on('mouseenter', AIR_CONFIG.layerId, handleAirLayerMouseEnter);
+        map.on('mouseleave', AIR_CONFIG.layerId, handleAirLayerMouseLeave);
+        airState.handlersBound = true;
+      }
       removeAirMarkers();
       airState.stations.forEach((station) => {
         const el = document.createElement('div');
         el.className = 'air-marker';
         el.style.setProperty('--marker-color', getAirLevelColor(station.daqi));
-        el.setAttribute('title', `${station.name} · DAQI ${station.daqi}`);
-        el.setAttribute('aria-label', `${station.name} air quality marker`);
-        el.innerHTML = `<span>${station.daqi}</span>`;
-        el.addEventListener('click', (event) => {
-          event.stopPropagation();
-          focusAirStation(station.id, { popup: true, silentTimestamp: true });
-        });
+        el.setAttribute('aria-hidden', 'true');
         const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat(station.coordinates)
-          .addTo(appState.map);
+          .addTo(map);
         airState.markers.push({ id: station.id, marker, element: el });
       });
       if (!airState.selectedStationId && airState.stations[0]) {
         airState.selectedStationId = airState.stations[0].id;
+        map.getSource(AIR_CONFIG.sourceId).setData(getAirGeoJson());
       }
       syncAirMarkerSelection();
     }
 
     function hideAirLayer() {
       removeAirMarkers();
+      removeAirMapLayer();
       removeLayerPopups('air');
       airState.selectedStationId = null;
       if (appState.selection?.type === 'air-station') {
@@ -4038,7 +4129,6 @@
                 <div class="air-metric"><span class="air-metric-label">PM2.5</span><span class="air-metric-value">${station.pollutants.pm25.toFixed(1)} µg/m³</span></div>
                 <div class="air-metric"><span class="air-metric-label">PM10</span><span class="air-metric-value">${station.pollutants.pm10.toFixed(1)} µg/m³</span></div>
                 <div class="air-metric"><span class="air-metric-label">NO₂</span><span class="air-metric-value">${station.pollutants.no2.toFixed(1)} µg/m³</span></div>
-                <div class="air-metric"><span class="air-metric-label">O₃</span><span class="air-metric-value">${station.pollutants.o3.toFixed(1)} µg/m³</span></div>
               </div>
               ${renderAirSparkline(station.history, color)}
               <span class="air-sparkline-label">Recent DAQI trend snapshot</span>
@@ -4100,7 +4190,6 @@
           <td>${station.pollutants.pm25.toFixed(1)}</td>
           <td>${station.pollutants.pm10.toFixed(1)}</td>
           <td>${station.pollutants.no2.toFixed(1)}</td>
-          <td>${station.pollutants.o3.toFixed(1)}</td>
         </tr>
       `).join('');
       return `
@@ -4124,7 +4213,6 @@
                 <th>PM2.5</th>
                 <th>PM10</th>
                 <th>NO₂</th>
-                <th>O₃</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -5217,12 +5305,27 @@
       getDeckLayers: getCrimeDeckLayers
     });
 
+    function getAirButtonState() {
+      if (!airState.stations.length) {
+        return {
+          label: '🟡 Air Quality',
+          meta: 'Static Liverpool fallback markers'
+        };
+      }
+      const summary = getAirSummary();
+      return {
+        label: `🟡 Air Quality (${airState.stations.length} stations)`,
+        meta: `${summary.level} · max DAQI ${summary.maxDaqi}`
+      };
+    }
+
     LayerRegistry.register('air', {
       load: loadAirLayer,
       render: renderAirLayer,
       hide: hideAirLayer,
       destroyPanelArtifacts() { destroyLayerCharts('air'); },
       getLegendItems() { return LAYER_DEFINITIONS.air.legends; },
+      getButtonState: getAirButtonState,
       getPanelContent(tab) {
         const isAirDetail = appState.panel.activeDetail === 'air' || appState.panel.activeDetail === 'air-station';
         if (!isAirDetail || !appState.activeLayers.air) return null;
