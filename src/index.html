@@ -994,6 +994,147 @@
       line-height: 1.55;
     }
 
+    .transport-marker {
+      --marker-color: var(--accent-cyan);
+      position: relative;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(255, 255, 255, 0.88);
+      background: rgba(10, 12, 15, 0.86);
+      color: var(--text);
+      font-size: 0.95rem;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+      cursor: pointer;
+      transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+      user-select: none;
+    }
+
+    .transport-marker::after {
+      content: '';
+      position: absolute;
+      inset: -7px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--marker-color) 44%, transparent 56%);
+      opacity: 0.85;
+    }
+
+    .transport-marker.rail {
+      --marker-color: var(--accent-cyan);
+    }
+
+    .transport-marker.bus {
+      --marker-color: var(--accent-blue);
+    }
+
+    .transport-marker:hover,
+    .transport-marker.selected {
+      transform: scale(1.08);
+      border-color: #ffffff;
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12), 0 18px 34px rgba(0, 0, 0, 0.4);
+    }
+
+    .transport-node-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .transport-node-card {
+      width: 100%;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.035);
+      text-align: left;
+      transition: transform var(--transition), border-color var(--transition), background var(--transition);
+    }
+
+    .transport-node-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .transport-node-card.selected {
+      border-color: rgba(6, 182, 212, 0.34);
+      background: rgba(6, 182, 212, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(6, 182, 212, 0.12);
+    }
+
+    .transport-node-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .transport-node-meta h3 {
+      margin: 0;
+      font-size: 0.96rem;
+    }
+
+    .transport-node-meta p {
+      margin: 6px 0 0;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .transport-node-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      font-size: 0.74rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .transport-node-badge.rail {
+      color: var(--accent-cyan);
+    }
+
+    .transport-node-badge.bus {
+      color: var(--accent-blue);
+    }
+
+    .transport-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .transport-detail-grid > div {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .transport-detail-grid strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .transport-detail-grid span {
+      display: block;
+      color: var(--text);
+      font-size: 0.84rem;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+
     @keyframes airMarkerPulse {
       0% {
         transform: scale(0.86);
@@ -1434,7 +1575,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script>
-    const APP_VERSION = '0.4.0-crime-heatmap';
+    const APP_VERSION = '0.5.0-business-transport';
     const LIVERPOOL_CENTER = [-2.9916, 53.4084];
     const LIVERPOOL_BOUNDS = {
       west: -3.08,
@@ -1445,11 +1586,11 @@
 
     const LAYER_DEFINITIONS = {
       crime: {
-        label: 'Crime Heatmap',
+        label: 'Crime',
         short: 'Crime',
         color: '#ff3b3b',
-        meta: 'deck.gl heatmap · cached by month',
-        detail: 'Three-month rolling crime density and category drill-down.',
+        meta: 'deck.gl heatmap · police.uk street crimes',
+        detail: 'Street-level crime density from police.uk for Liverpool city centre.',
         legends: [
           { type: 'gradient', label: 'Low → high density', colors: 'linear-gradient(90deg, #3b82f6 0%, #ffd700 50%, #ff3b3b 100%)' }
         ]
@@ -1553,7 +1694,8 @@
       },
       systemError: null,
       banner: null,
-      popups: {}
+      popups: {},
+      suppressedMapClickUntil: 0
     };
 
     const LayerRegistry = {
@@ -1717,6 +1859,12 @@
         const stationButton = event.target.closest('[data-air-station]');
         if (stationButton) {
           focusAirStation(stationButton.dataset.airStation, { flyTo: true, popup: true, silentTimestamp: true });
+          return;
+        }
+
+        const transportButton = event.target.closest('[data-transport-node]');
+        if (transportButton) {
+          focusTransportNode(transportButton.dataset.transportNode, { flyTo: true, popup: true, silentTimestamp: true });
         }
       });
 
@@ -1794,6 +1942,13 @@
       appState.map.on('move', () => {
         const center = appState.map.getCenter();
         updateViewportReadout({ lat: center.lat, lng: center.lng, zoom: appState.map.getZoom() });
+      });
+
+      appState.map.on('moveend', () => {
+        if (['business', 'business-hex', 'transport', 'transport-node'].includes(appState.panel.activeDetail)) {
+          renderLayerSummary();
+          renderPanel();
+        }
       });
 
       appState.map.on('click', (event) => {
@@ -1989,7 +2144,7 @@
 
           <div class="info-card">
             <h3>Layer activity mix</h3>
-            <p>The chart below is intentionally simple: it proves Chart.js lifecycle handling in the single-file shell while the remaining business, transport, planning, and flood analytics continue to land.</p>
+            <p>The chart below keeps proving Chart.js lifecycle cleanup while planning, flood, and the Business Insight Engine continue to land on top of the live shell.</p>
             <canvas id="overview-chart" height="220" aria-label="Layer activity chart"></canvas>
           </div>
 
@@ -2091,7 +2246,7 @@
               <li><strong>Crime</strong>data.police.uk crime street API, cached by month for rolling hotspot views.</li>
               <li><strong>Air quality</strong>DEFRA AURN readings with DAQI-style marker states and advisory copy.</li>
               <li><strong>Deprivation</strong>ONS IMD 2019 Liverpool LSOAs with choropleth styling and distribution charts.</li>
-              <li><strong>Business + transport</strong>Overpass business POIs plus embedded Merseyrail and bus nodes for connectivity context.</li>
+              <li><strong>Business + transport</strong>Embedded business POIs plus static Merseyrail and bus nodes for connectivity context.</li>
               <li><strong>Planning + flood</strong>Liverpool planning feeds and Environment Agency flood zones with risk-aware symbology.</li>
             </ul>
           </div>
@@ -2281,6 +2436,9 @@
     }
 
     function handleMapClick(lngLat) {
+      if (Date.now() < (appState.suppressedMapClickUntil || 0)) {
+        return;
+      }
       const selection = buildCoordinateSelection(lngLat.lng, lngLat.lat);
       appState.selection = selection;
       appState.panel.activeDetail = 'map-click';
@@ -2497,11 +2655,12 @@
 
     // ===== CRIME HEATMAP LAYER (P1) =====
     const CRIME_CONFIG = {
+      cacheKey: 'crime_2024-11',
       cacheTtlMs: 1000 * 60 * 60 * 6,
-      initialMonthOffset: 2,
-      monthCount: 6,
+      monthKey: '2024-11',
       fetchLat: 53.4084,
       fetchLng: -2.9916,
+      fetchUrl: 'https://data.police.uk/api/crimes-street/all-crime?lat=53.4084&lng=-2.9916&date=2024-11',
       heatmapId: 'crime-heatmap'
     };
 
@@ -2544,7 +2703,7 @@
       }
     ];
 
-    const CRIME_MONTH_OPTIONS = buildCrimeMonthKeys(CRIME_CONFIG.monthCount, CRIME_CONFIG.initialMonthOffset);
+    const CRIME_MONTH_OPTIONS = [CRIME_CONFIG.monthKey];
     const CRIME_FALLBACK_DATA = buildCrimeFallbackData(CRIME_MONTH_OPTIONS);
 
     const crimeState = {
@@ -2658,6 +2817,10 @@
           street,
           area: item.area || street,
           coordinates: [lng, lat],
+          location: {
+            longitude: String(item.location?.longitude ?? lng),
+            latitude: String(item.location?.latitude ?? lat)
+          },
           raw: item
         };
       }).filter(Boolean);
@@ -2671,35 +2834,44 @@
       return cloneCrimeIncidents(CRIME_FALLBACK_DATA[fallbackKey] || []);
     }
 
-    async function resolveCrimeLayerData(monthKey) {
-      const cacheKey = `crime_${monthKey}`;
-      const url = `https://data.police.uk/api/crimes-street/all-crime?lat=${CRIME_CONFIG.fetchLat}&lng=${CRIME_CONFIG.fetchLng}&date=${monthKey}`;
-      try {
-        const { data, source } = await cachedFetch(url, cacheKey, CRIME_CONFIG.cacheTtlMs, 12000);
-        const incidents = normaliseCrimeIncidents(data, monthKey);
-        if (!incidents.length) {
-          throw new Error('No incidents returned for the selected month.');
+    async function loadCrimeData() {
+      const cachedRaw = sessionStorage.getItem(CRIME_CONFIG.cacheKey);
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && typeof cached.ts === 'number' && Date.now() - cached.ts < CRIME_CONFIG.cacheTtlMs) {
+            const cacheTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date(cached.ts));
+            appState.cacheMeta[CRIME_CONFIG.cacheKey] = `Session cache · ${cacheTime}`;
+            return { data: cached.payload, source: 'cache' };
+          }
+        } catch {
+          sessionStorage.removeItem(CRIME_CONFIG.cacheKey);
         }
-        return {
-          incidents,
-          source,
-          sourceLabel: source === 'cache'
-            ? 'data.police.uk · cached Merseyside street crimes'
-            : 'data.police.uk · Merseyside street crimes'
-        };
-      } catch (error) {
-        const fallbackIncidents = getCrimeFallbackMonth(monthKey);
-        if (!fallbackIncidents.length) {
-          throw error;
-        }
-        const fallbackTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date());
-        appState.cacheMeta[cacheKey] = `Embedded fallback · ${fallbackTime}`;
-        return {
-          incidents: fallbackIncidents,
-          source: 'fallback',
-          sourceLabel: 'Embedded fallback · Liverpool sample crime snapshot'
-        };
       }
+
+      const data = await fetchJsonWithTimeout(CRIME_CONFIG.fetchUrl, 12000);
+      const liveTime = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' }).format(new Date());
+      try {
+        sessionStorage.setItem(CRIME_CONFIG.cacheKey, JSON.stringify({ payload: data, ts: Date.now() }));
+      } catch {
+      }
+      appState.cacheMeta[CRIME_CONFIG.cacheKey] = `Live fetch · ${liveTime}`;
+      return { data, source: 'live' };
+    }
+
+    async function resolveCrimeLayerData(monthKey = CRIME_CONFIG.monthKey) {
+      const { data, source } = await loadCrimeData();
+      const incidents = normaliseCrimeIncidents(data, monthKey);
+      if (!incidents.length) {
+        throw new Error('No incidents returned for the selected month.');
+      }
+      return {
+        incidents,
+        source,
+        sourceLabel: source === 'cache'
+          ? 'data.police.uk · cached street crimes'
+          : 'data.police.uk · street crimes'
+      };
     }
 
     function buildCrimeSelection() {
@@ -2789,7 +2961,7 @@
         applyCrimeFilters();
         appState.layerErrors.crime = null;
         clearBanner();
-        syncCrimeUi(`Crime heatmap active · ${formatCrimeMonth(targetMonth)} · ${payload.source === 'fallback' ? 'fallback data' : payload.source}`);
+        syncCrimeUi(`Crime heatmap active · ${formatCrimeMonth(targetMonth)} · ${payload.source}`);
       } catch (error) {
         crimeState.incidents = [];
         crimeState.filteredIncidents = [];
@@ -2942,7 +3114,7 @@
       if (!crimeState.summary) {
         return '<div class="info-card"><h3>No crime data</h3><p>No incidents are available for the current selection.</p></div>';
       }
-      const cacheKey = `crime_${crimeState.selectedMonth}`;
+      const cacheKey = CRIME_CONFIG.cacheKey;
       const rows = crimeState.summary.categoryCounts.map((entry) => `
         <tr>
           <td><strong>${escapeHtml(entry.label)}</strong></td>
@@ -2995,8 +3167,8 @@
       }
       if (crimeState.summary) {
         return {
-          label: `Crime (${crimeState.summary.total.toLocaleString()})`,
-          meta: `${formatCrimeMonth(crimeState.selectedMonth)} · ${crimeState.selectedCategories.length}/${crimeState.categoryOptions.length || 0} categories · ${crimeState.source === 'fallback' ? 'fallback' : 'live/cache'}`
+          label: `🔴 Crime (${crimeState.incidents.length.toLocaleString()})`,
+          meta: `${formatCrimeMonth(crimeState.selectedMonth)} · ${crimeState.selectedCategories.length}/${crimeState.categoryOptions.length || 0} categories · ${crimeState.source === 'cache' ? 'session cache' : 'live'}`
         };
       }
       return {
@@ -3013,7 +3185,7 @@
         new deck.HeatmapLayer({
           id: CRIME_CONFIG.heatmapId,
           data: crimeState.filteredIncidents,
-          getPosition: (incident) => incident.coordinates,
+          getPosition: (d) => [parseFloat(d.location.longitude), parseFloat(d.location.latitude)],
           getWeight: () => 1,
           intensity: 1,
           radiusPixels: 40,
